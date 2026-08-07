@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ghar cost &amp; steel estimator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Frontend + backend, on Vercel</p>
+    <h1>Ghar cost &amp; steel estimator</h1>
+    <p class="tagline">You provide the plot and room details — every calculation runs on the backend.</p>
+  </div>
+</header>
+
+<main>
+<form id="estimate-form">
+
+  <details class="block" open>
+    <summary>Plot &amp; floors</summary>
+    <div class="field-grid cols-3">
+      <div><label for="plotLength">Plot length (ft)</label><input type="number" id="plotLength" value="40" min="10"></div>
+      <div><label for="plotWidth">Plot width (ft)</label><input type="number" id="plotWidth" value="30" min="10"></div>
+      <div><label for="floors">Number of floors</label>
+        <select id="floors"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
+    </div>
+  </details>
+
+  <details class="block" open>
+    <summary>Rooms</summary>
+    <div class="room-row room-row-head" aria-hidden="true">
+      <span class="ts">Room length (ft)</span><span class="ts">Room width (ft)</span><span></span>
+    </div>
+    <div id="room-list"></div>
+    <button type="button" id="add-room" class="secondary-btn">+ Add room</button>
+  </details>
+
+  <details class="block" open>
+    <summary>Doors &amp; windows</summary>
+    <div class="field-grid cols-2">
+      <div><label for="totalDoors">Number of doors (per floor)</label><input type="number" id="totalDoors" value="6" min="0"></div>
+      <div><label for="totalWindows">Number of windows (per floor)</label><input type="number" id="totalWindows" value="6" min="0"></div>
+    </div>
+    <div class="field-grid cols-2" style="margin-top:14px">
+      <div><label for="doorSize">Standard door size</label>
+        <select id="doorSize">
+          <option value="3x6.5">3 ft x 6.5 ft</option>
+          <option value="3x7" selected>3 ft x 7 ft</option>
+          <option value="3.5x7">3.5 ft x 7 ft</option>
+        </select></div>
+      <div><label for="windowSize">Standard window size</label>
+        <select id="windowSize">
+          <option value="3x4">3 ft x 4 ft</option>
+          <option value="4x4" selected>4 ft x 4 ft</option>
+          <option value="4x5">4 ft x 5 ft</option>
+        </select></div>
+    </div>
+  </details>
+
+  <details class="block" open>
+    <summary>Washrooms, bathrooms &amp; parking</summary>
+    <div class="field-grid cols-3">
+      <div><label for="washrooms">Washrooms (per floor)</label><input type="number" id="washrooms" value="1" min="0">
+        <p class="hint">WC + basin only</p></div>
+      <div><label for="bathrooms">Bathrooms (per floor)</label><input type="number" id="bathrooms" value="1" min="0">
+        <p class="hint">WC + basin + shower</p></div>
+      <div><label for="parking">Parking (total bays)</label><input type="number" id="parking" value="1" min="0">
+        <p class="hint">Ground level, not per floor</p></div>
+    </div>
+  </details>
+
+  <button type="submit">Calculate detailed estimate</button>
+  <p class="hint" id="form-status" role="status"></p>
+</form>
+
+<section class="panel result-panel" id="result-panel" hidden>
+  <div class="corner tl" aria-hidden="true"></div>
+  <div class="corner tr" aria-hidden="true"></div>
+  <div class="corner bl" aria-hidden="true"></div>
+  <div class="corner br" aria-hidden="true"></div>
+  <p class="eyebrow">Structural summary</p>
+  <table id="summary-table"><tbody></tbody></table>
+
+  <p class="eyebrow" style="margin-top:24px">Itemized estimate</p>
+  <table id="result-table"><tbody></tbody></table>
+  <p class="total-cost" id="total-cost"></p>
+
+  <details class="assumptions">
+    <summary>Assumptions &amp; methodology used</summary>
+    <ul>
+      <li>All rates, wastage %, contingency (5%), transportation (3%), and labor (32%) are set on the backend — see <code>api/estimate.js</code> to change them.</li>
+      <li>Wall height fixed at 10 ft; soil type assumed medium; concrete mix M20; column count auto-estimated from built-up area — all backend defaults.</li>
+      <li>Windows assumed external, doors assumed internal (plus one main entrance door), consistent with the earlier version.</li>
+      <li>Washroom and bathroom sizes use standard defaults (5x4 ft and 6x5 ft) since only counts are collected on the frontend.</li>
+      <li>This is a preliminary/detailed <em>estimate</em>, not a certified structural design — verify sizing with a licensed structural engineer before construction.</li>
+    </ul>
+  </details>
+</section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
