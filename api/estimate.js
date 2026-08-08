@@ -129,6 +129,7 @@ function calculateEstimate(input) {
   const washrooms = Math.round(requireNum(input.washrooms, 'Washrooms', { min: 0, max: 20 }));
   const bathrooms = Math.round(requireNum(input.bathrooms, 'Bathrooms', { min: 0, max: 20 }));
   const parking = Math.round(requireNum(input.parking, 'Parking bays', { min: 0, max: 100 }));
+  const parkingArea = parking * PARKING_BAY_SIZE.length * PARKING_BAY_SIZE.width;
 
   if (rooms.length === 0 && washrooms === 0 && bathrooms === 0) {
     throw new Error('At least one room, washroom, or bathroom is required.');
@@ -152,12 +153,16 @@ function calculateEstimate(input) {
   // Every floor shares the same footprint as the plot (this tool doesn't
   // model setbacks), so the rooms on one floor can't add up to more area
   // than the plot itself provides — even if no single room broke that rule
-  // on its own.
+  // on its own. Parking is ground-level only, but it still has to be carved
+  // out of that same footprint — it was previously priced without ever
+  // being checked against the space it actually needs.
   const plotFootprintArea = plotLength * plotWidth;
-  if (builtUpAreaPerFloor > plotFootprintArea) {
-    throw new Error('The rooms, washrooms, and bathrooms on one floor need about ' +
-      Math.round(builtUpAreaPerFloor) + ' sqft, but the plot footprint is only ' +
-      Math.round(plotFootprintArea) + ' sqft. Reduce room sizes/count or increase the plot size.');
+  const groundFloorNeedSqft = builtUpAreaPerFloor + parkingArea;
+  if (groundFloorNeedSqft > plotFootprintArea) {
+    throw new Error('The ground floor needs about ' + Math.round(builtUpAreaPerFloor) + ' sqft for rooms' +
+      (parkingArea > 0 ? ' plus ' + Math.round(parkingArea) + ' sqft for parking' : '') + ' = ' +
+      Math.round(groundFloorNeedSqft) + ' sqft, but the plot footprint is only ' +
+      Math.round(plotFootprintArea) + ' sqft. Reduce room sizes/count/parking, or increase the plot size.');
   }
 
   const numColumns = Math.max(4, Math.round(builtUpAreaPerFloor * COLUMNS_PER_SQFT));
@@ -168,6 +173,27 @@ function calculateEstimate(input) {
   const internalWallLengthPerFloor = roomPerimSum / 2;
   const internalWallAreaGrossPerFloor = internalWallLengthPerFloor * WALL_HEIGHT_FT;
   const internalWallNet = Math.max(0, internalWallAreaGrossPerFloor * floors - totalDoors * doorArea * floors);
+
+  // A wall can only hold so many openings before there's no solid wall left
+  // to hold them up — neither windows nor doors were ever checked against
+  // the actual wall length available to put them in. OPENING_SHARE_MAX
+  // leaves the rest for solid wall, corners, and structure.
+  const OPENING_SHARE_MAX = 0.6;
+  const windowBudgetFt = perimeter * OPENING_SHARE_MAX;
+  const windowNeedFt = totalWindows * windowW + MAIN_DOOR_COUNT * doorW;
+  if (windowNeedFt > windowBudgetFt) {
+    throw new Error('Windows (' + totalWindows + ' x ' + windowW + ' ft = ' + Math.round(totalWindows * windowW) +
+      ' ft) plus the main entrance door need about ' + Math.round(windowNeedFt) + ' ft of exterior wall, but only ' +
+      Math.round(windowBudgetFt) + ' ft is available out of ' + Math.round(perimeter) + ' ft of total perimeter ' +
+      '(the rest has to stay solid wall). Reduce the window count or increase the plot size.');
+  }
+  const doorBudgetFt = internalWallLengthPerFloor * OPENING_SHARE_MAX;
+  const doorNeedFt = totalDoors * doorW;
+  if (doorNeedFt > doorBudgetFt) {
+    throw new Error('Doors (' + totalDoors + ' x ' + doorW + ' ft = ' + Math.round(doorNeedFt) +
+      ' ft) need more internal partition wall than these rooms have — only ' + Math.round(doorBudgetFt) +
+      ' ft is available out of ' + Math.round(internalWallLengthPerFloor) + ' ft. Reduce the door count or add/resize rooms.');
+  }
 
   // --- Structural sizing (thumb-rules) --------------------------------------
   const maxSpanFt = rooms.reduce(function (m, r) { return Math.max(m, r.length, r.width); },
@@ -232,7 +258,7 @@ function calculateEstimate(input) {
   const floorAreaTotal = roomAreaSum * floors;
   const skirtingArea = roomPerimSum * floors * 0.5;
   const tileAreaFinal = (floorAreaTotal + skirtingArea) * (1 + WASTAGE_PERCENT.tile / 100);
-  const parkingArea = parking * PARKING_BAY_SIZE.length * PARKING_BAY_SIZE.width;
+  // parkingArea is computed earlier now (needed for the ground-floor footprint check)
 
   // --- Openings & MEP ------------------------------------------------------
   const doorCount = totalDoors * floors + MAIN_DOOR_COUNT;

@@ -267,3 +267,39 @@ this is a genuinely new list, not a rehash. The theme shifted from "fix
 what's broken" (done) to "protect what's now working and know what to build
 next" — the kind of list that shows up right after a product stabilizes,
 not before.
+
+---
+
+## Bug found by the user, and one claim pushed back on — 2026-08-08 (same day)
+
+The user noticed that a 3-room scenario (15x15, 15x15, 25x25 on a 50x45 plot)
+summed to 55 ft against a 50 ft plot length and a 45 ft plot width, and asked
+why that was allowed. Worth recording both halves of this honestly:
+
+- **Pushed back, with the numbers to back it up**: summing every room's
+  length and comparing to plot length assumes all rooms sit in a single row,
+  which isn't how floor plans work. Those 3 rooms use only 47.8% of the plot
+  footprint and fit in an L-shaped 40x30 block inside the 50x45 plot with
+  room to spare. Verified that implementing the user's literal suggestion
+  would have broken a scenario this skill's own prior review had confirmed
+  as good (the 45x35, 4-room case from Redesign #1's customer review) — the
+  sum-of-lengths check would reject it too, incorrectly.
+- `SHIPPED` **Two gaps the user's underlying instinct was right about.**
+  Neither was previously checked:
+  1. Parking was priced but never checked against the plot footprint it
+     actually needs — a plot could be entirely full of rooms and still get
+     charged for parking bays with nowhere to go. Ground floor now checks
+     `rooms + parking <= plot footprint`.
+  2. Doors and windows were never checked against the wall length available
+     to put them in. Windows (+ the main entrance door) now check against
+     60% of the external perimeter; doors check against 60% of internal
+     partition wall length. Both verified to reject deliberately-overflowing
+     cases with the actual numbers in the error, and verified the three
+     known-good baseline scenarios (the 40x30 default, the 45x35 4-room
+     case, and the user's own 50x45 3-room case) all still return `200` with
+     unchanged totals — nothing regressed.
+
+This is a good example of the risk flagged in Shortlist #2 item 1 (no
+automated tests): confirming these three baselines by hand, again, is the
+kind of check that should be a 30-second test run, not a manual re-verification
+every time a validation rule changes.
