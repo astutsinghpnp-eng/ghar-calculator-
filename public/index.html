@@ -12,12 +12,71 @@
 
 <a class="skip-link" href="#plotLength">Skip to form</a>
 
+<div class="persona-gate" id="persona-gate">
+  <div class="persona-gate-card" role="dialog" aria-modal="true" aria-labelledby="persona-gate-title">
+    <div class="persona-gate-mark" aria-hidden="true">G</div>
+
+    <div class="persona-step" id="step-choose">
+      <p class="persona-gate-eyebrow">Before we start</p>
+      <h2 id="persona-gate-title">What brings you here today?</h2>
+      <p class="persona-gate-sub">Tell us a little about yourself so we can show you the right experience.</p>
+      <div class="persona-choice-row">
+        <button type="button" class="persona-choice-btn" id="choose-individual">
+          <span class="persona-choice-title">Building my own home</span>
+          <span class="persona-choice-sub">A single house, for myself or my family</span>
+        </button>
+        <button type="button" class="persona-choice-btn" id="choose-business">
+          <span class="persona-choice-title">Business / Contractor</span>
+          <span class="persona-choice-sub">Estimating for clients or multiple projects</span>
+        </button>
+      </div>
+    </div>
+
+    <form class="persona-step" id="step-details-individual" hidden>
+      <p class="persona-gate-eyebrow">Just a few details</p>
+      <h2>Tell us how to reach you</h2>
+      <div class="field-grid cols-2">
+        <div><label for="lead-name-i">Your name</label><input type="text" id="lead-name-i" maxlength="100" required></div>
+        <div><label for="lead-contact-i">Email or phone</label><input type="text" id="lead-contact-i" maxlength="100" required></div>
+      </div>
+      <div class="field-grid cols-2">
+        <div><label for="lead-city-i">City (optional)</label><input type="text" id="lead-city-i" maxlength="100"></div>
+      </div>
+      <p class="persona-gate-status" id="persona-gate-status-i" role="status"></p>
+      <div class="persona-gate-actions">
+        <button type="button" class="secondary-btn persona-back">Back</button>
+        <button type="submit" class="persona-submit-btn">Continue to the calculator</button>
+      </div>
+    </form>
+
+    <form class="persona-step" id="step-details-business" hidden>
+      <p class="persona-gate-eyebrow">Just a few details</p>
+      <h2>Tell us about your business</h2>
+      <div class="field-grid cols-2">
+        <div><label for="lead-company">Company name</label><input type="text" id="lead-company" maxlength="150" required></div>
+        <div><label for="lead-name-b">Contact person</label><input type="text" id="lead-name-b" maxlength="100" required></div>
+      </div>
+      <div class="field-grid cols-2">
+        <div><label for="lead-contact-b">Email or phone</label><input type="text" id="lead-contact-b" maxlength="100" required></div>
+        <div><label for="lead-projects">Projects per year (optional)</label><input type="text" id="lead-projects" maxlength="20"></div>
+      </div>
+      <p class="persona-gate-status" id="persona-gate-status-b" role="status"></p>
+      <div class="persona-gate-actions">
+        <button type="button" class="secondary-btn persona-back">Back</button>
+        <button type="submit" class="persona-submit-btn">Continue to the calculator</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<button type="button" class="mode-switch-btn" id="mode-switch-btn" hidden></button>
+
 <header class="hero">
   <div class="hero-grid" aria-hidden="true"></div>
   <div class="hero-content">
-    <p class="eyebrow">Frontend + backend, on Vercel</p>
+    <p class="eyebrow" id="hero-eyebrow">Frontend + backend, on Vercel</p>
     <h1>Ghar cost &amp; steel estimator</h1>
-    <p class="tagline">You provide the plot and room details — every calculation runs on the backend.</p>
+    <p class="tagline" id="hero-tagline">You provide the plot and room details — every calculation runs on the backend.</p>
     <p class="unit-disclosure">All prices in Indian Rupees (₹) · all dimensions in feet (ft)</p>
   </div>
 </header>
@@ -25,8 +84,33 @@
 <main>
 <form id="estimate-form" novalidate>
 
+  <details class="block" id="business-project-block" open hidden>
+    <summary>Client &amp; project</summary>
+    <div class="field-grid cols-2">
+      <div><label for="projectClient">Client / project name</label><input type="text" id="projectClient" maxlength="150" placeholder="e.g. Sharma Residence, Plot 12"></div>
+    </div>
+  </details>
+
   <details class="block" open>
     <summary>Plot &amp; floors</summary>
+
+    <div class="map-upload-row">
+      <button type="button" class="map-upload-btn" id="map-upload-btn" aria-label="Upload a site map or photo to read dimensions from">+</button>
+      <div class="map-upload-text">
+        <span class="map-upload-title">Have a site map or plot photo?</span>
+        <span class="map-upload-sub">Upload a photo or PDF and we'll try to read the plot dimensions for you.</span>
+      </div>
+      <input type="file" id="map-upload-input" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" hidden>
+    </div>
+    <div class="map-upload-status" id="map-upload-status" role="status" hidden></div>
+    <div class="map-suggestion" id="map-suggestion" hidden>
+      <p class="map-suggestion-text" id="map-suggestion-text"></p>
+      <div class="map-suggestion-actions">
+        <button type="button" class="secondary-btn" id="map-suggestion-dismiss">Dismiss</button>
+        <button type="button" class="persona-submit-btn" id="map-suggestion-apply">Apply to plot length/width</button>
+      </div>
+    </div>
+
     <div class="field-grid cols-3">
       <div><label for="plotLength">Plot length (ft)</label><input type="number" id="plotLength" value="40" min="10" max="500" required></div>
       <div><label for="plotWidth">Plot width (ft)</label><input type="number" id="plotWidth" value="30" min="10" max="500" required></div>

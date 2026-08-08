@@ -2,6 +2,241 @@
 // listed on the page and sends them to /api/estimate, then renders
 // whatever comes back. All BOQ logic lives in api/estimate.js.
 
+// --- Persona intake gate --------------------------------------------------
+// First-visit-required (persisted to localStorage after that): asks who the
+// visitor is, captures contact details via /api/lead, then tailors a few
+// pieces of copy/UI to "individual" vs "business" without forking the whole
+// app into two separate codebases.
+const PERSONA_KEY = 'gharPersona.v1';
+const gate = document.getElementById('persona-gate');
+const stepChoose = document.getElementById('step-choose');
+const stepIndividual = document.getElementById('step-details-individual');
+const stepBusiness = document.getElementById('step-details-business');
+const modeSwitchBtn = document.getElementById('mode-switch-btn');
+let gateDismissible = false;
+
+function showStep(step) {
+  [stepChoose, stepIndividual, stepBusiness].forEach(function (s) { s.hidden = (s !== step); });
+  const firstField = step.querySelector('input, button');
+  if (firstField) firstField.focus();
+}
+
+function openGate(dismissible) {
+  gateDismissible = !!dismissible;
+  gate.hidden = false;
+  document.querySelector('main').inert = true;
+  showStep(stepChoose);
+}
+
+function closeGate() {
+  gate.hidden = true;
+  document.querySelector('main').inert = false;
+}
+
+function applyPersonaUI(persona) {
+  const isBusiness = persona === 'business';
+  document.getElementById('hero-eyebrow').textContent = isBusiness
+    ? 'For contractors & businesses, on Vercel'
+    : 'Frontend + backend, on Vercel';
+  document.getElementById('hero-tagline').textContent = isBusiness
+    ? 'Generate a client-ready structural estimate in minutes — enter the plot and room details, we handle the math.'
+    : 'You provide the plot and room details — every calculation runs on the backend.';
+  document.getElementById('business-project-block').hidden = !isBusiness;
+  document.getElementById('save-scenario-a').textContent = isBusiness ? 'Save Project A' : 'Save as Scenario A';
+  document.getElementById('save-scenario-b').textContent = isBusiness ? 'Save Project B' : 'Save as Scenario B';
+  modeSwitchBtn.textContent = (isBusiness ? 'Business mode' : 'Homeowner mode') + ' · Switch';
+  modeSwitchBtn.hidden = false;
+}
+
+function submitLead(persona, fields, statusEl, submitBtn) {
+  statusEl.textContent = '';
+  submitBtn.disabled = true;
+  const payload = Object.assign({ persona: persona }, fields);
+  fetch('/api/lead', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok) { throw new Error(result.data.error || 'Something went wrong.'); }
+      try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
+      applyPersonaUI(persona);
+      closeGate();
+    })
+    .catch(function (err) {
+      statusEl.textContent = err.message + ' You can try again, or continue without saving your details.';
+      // A backend hiccup shouldn't permanently lock a real visitor out —
+      // offer a way through after the first failed attempt, without ever
+      // silently skipping the ask on a clean run.
+      let continueLink = statusEl.nextElementSibling;
+      if (!continueLink || !continueLink.classList || !continueLink.classList.contains('persona-continue-anyway')) {
+        continueLink = document.createElement('button');
+        continueLink.type = 'button';
+        continueLink.className = 'secondary-btn persona-continue-anyway';
+        continueLink.textContent = 'Continue without saving details';
+        continueLink.addEventListener('click', function () {
+          try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
+          applyPersonaUI(persona);
+          closeGate();
+        });
+        statusEl.insertAdjacentElement('afterend', continueLink);
+      }
+    })
+    .finally(function () {
+      submitBtn.disabled = false;
+    });
+}
+
+document.getElementById('choose-individual').addEventListener('click', function () { showStep(stepIndividual); });
+document.getElementById('choose-business').addEventListener('click', function () { showStep(stepBusiness); });
+document.querySelectorAll('.persona-back').forEach(function (btn) {
+  btn.addEventListener('click', function () { showStep(stepChoose); });
+});
+
+stepIndividual.addEventListener('submit', function (e) {
+  e.preventDefault();
+  const fields = {
+    name: document.getElementById('lead-name-i').value,
+    contact: document.getElementById('lead-contact-i').value,
+    city: document.getElementById('lead-city-i').value
+  };
+  submitLead('individual', fields, document.getElementById('persona-gate-status-i'), stepIndividual.querySelector('.persona-submit-btn'));
+});
+
+stepBusiness.addEventListener('submit', function (e) {
+  e.preventDefault();
+  const fields = {
+    name: document.getElementById('lead-name-b').value,
+    contact: document.getElementById('lead-contact-b').value,
+    companyName: document.getElementById('lead-company').value,
+    projectsPerYear: document.getElementById('lead-projects').value
+  };
+  submitLead('business', fields, document.getElementById('persona-gate-status-b'), stepBusiness.querySelector('.persona-submit-btn'));
+});
+
+modeSwitchBtn.addEventListener('click', function () { openGate(true); });
+
+gate.addEventListener('click', function (e) {
+  if (e.target === gate && gateDismissible) closeGate();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && !gate.hidden && gateDismissible) closeGate();
+});
+
+// Boot: skip the gate entirely for a returning visitor who already chose.
+(function () {
+  let savedPersona = null;
+  try { savedPersona = localStorage.getItem(PERSONA_KEY); } catch (e) { savedPersona = null; }
+  if (savedPersona === 'individual' || savedPersona === 'business') {
+    closeGate();
+    applyPersonaUI(savedPersona);
+  } else {
+    openGate(false);
+  }
+})();
+
+// --- Map/photo upload → dimension suggestion ------------------------------
+// Uploads a site map/photo/PDF to /api/extract-dimensions (Claude vision on
+// the backend) and shows whatever it reads as a suggestion the visitor has
+// to explicitly apply — never auto-filled, since a misread here would be
+// exactly the kind of confidently-wrong number this app has spent a lot of
+// effort trying to avoid elsewhere.
+const MAP_MAX_BYTES = 15 * 1024 * 1024;
+const mapUploadBtn = document.getElementById('map-upload-btn');
+const mapUploadInput = document.getElementById('map-upload-input');
+const mapUploadStatus = document.getElementById('map-upload-status');
+const mapSuggestion = document.getElementById('map-suggestion');
+const mapSuggestionText = document.getElementById('map-suggestion-text');
+let pendingMapSuggestion = null;
+
+function setMapStatus(text, isError) {
+  mapUploadStatus.hidden = !text;
+  mapUploadStatus.textContent = text || '';
+  mapUploadStatus.classList.toggle('error', !!isError);
+}
+
+function fileToBase64(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      // reader.result is "data:<mime>;base64,<data>" — only the part after the comma is needed.
+      const commaIndex = reader.result.indexOf(',');
+      resolve(reader.result.slice(commaIndex + 1));
+    };
+    reader.onerror = function () { reject(new Error('Could not read that file.')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+mapUploadBtn.addEventListener('click', function () { mapUploadInput.click(); });
+
+mapUploadInput.addEventListener('change', function () {
+  const file = mapUploadInput.files[0];
+  mapSuggestion.hidden = true;
+  if (!file) return;
+
+  if (file.size > MAP_MAX_BYTES) {
+    setMapStatus('That file is too large — please upload something under 15MB.', true);
+    mapUploadInput.value = '';
+    return;
+  }
+
+  setMapStatus('Reading "' + file.name + '"…', false);
+
+  fileToBase64(file)
+    .then(function (base64) {
+      return fetch('/api/extract-dimensions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, fileName: file.name })
+      });
+    })
+    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok) { throw new Error(result.data.error || 'Something went wrong reading that file.'); }
+      const r = result.data;
+      if (r.lengthFt === null && r.widthFt === null) {
+        setMapStatus('Could not read plot dimensions from that file' + (r.notes ? ': ' + r.notes : '.'), true);
+        return;
+      }
+      setMapStatus('', false);
+      pendingMapSuggestion = r;
+      const parts = [];
+      if (r.lengthFt !== null) parts.push('length ' + r.lengthFt + ' ft');
+      if (r.widthFt !== null) parts.push('width ' + r.widthFt + ' ft');
+      mapSuggestionText.textContent = 'We read ' + parts.join(' and ') + ' from "' + file.name + '" (' + r.confidence + ' confidence).' +
+        (r.notes ? ' ' + r.notes : '') + ' Double-check against the original before applying.';
+      mapSuggestion.hidden = false;
+    })
+    .catch(function (err) {
+      setMapStatus(err.message, true);
+    })
+    .finally(function () {
+      mapUploadInput.value = '';
+    });
+});
+
+document.getElementById('map-suggestion-apply').addEventListener('click', function () {
+  if (!pendingMapSuggestion) return;
+  function setVal(id, v) {
+    const el = document.getElementById(id);
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  if (pendingMapSuggestion.lengthFt !== null) setVal('plotLength', pendingMapSuggestion.lengthFt);
+  if (pendingMapSuggestion.widthFt !== null) setVal('plotWidth', pendingMapSuggestion.widthFt);
+  mapSuggestion.hidden = true;
+  pendingMapSuggestion = null;
+});
+
+document.getElementById('map-suggestion-dismiss').addEventListener('click', function () {
+  mapSuggestion.hidden = true;
+  pendingMapSuggestion = null;
+});
+
 const roomList = document.getElementById('room-list');
 
 // Each room row gets a unique, stable id (independent of its position, so it
@@ -320,6 +555,11 @@ function render(data) {
 
 function buildSummaryText(data) {
   const lines = ['Ghar Calculator — Estimate Summary', ''];
+  const clientField = document.getElementById('projectClient');
+  if (clientField && !document.getElementById('business-project-block').hidden && clientField.value.trim()) {
+    lines.push('Client / project: ' + clientField.value.trim());
+    lines.push('');
+  }
   lines.push('Built-up area: ' + fmt(data.summary.builtUpAreaTotal) + ' sqft');
   lines.push('Slab thickness: ' + data.summary.slabThicknessMm + ' mm');
   lines.push('Beam size: ' + data.summary.beamSizeMm + ' mm');
