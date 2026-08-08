@@ -25,8 +25,8 @@
   <details class="block" open>
     <summary>Plot &amp; floors</summary>
     <div class="field-grid cols-3">
-      <div><label for="plotLength">Plot length (ft)</label><input type="number" id="plotLength" value="40" min="10"></div>
-      <div><label for="plotWidth">Plot width (ft)</label><input type="number" id="plotWidth" value="30" min="10"></div>
+      <div><label for="plotLength">Plot length (ft)</label><input type="number" id="plotLength" value="40" min="10" max="500" required></div>
+      <div><label for="plotWidth">Plot width (ft)</label><input type="number" id="plotWidth" value="30" min="10" max="500" required></div>
       <div><label for="floors">Number of floors</label>
         <select id="floors"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
     </div>
@@ -44,8 +44,8 @@
   <details class="block" open>
     <summary>Doors &amp; windows</summary>
     <div class="field-grid cols-2">
-      <div><label for="totalDoors">Number of doors (per floor)</label><input type="number" id="totalDoors" value="6" min="0"></div>
-      <div><label for="totalWindows">Number of windows (per floor)</label><input type="number" id="totalWindows" value="6" min="0"></div>
+      <div><label for="totalDoors">Number of doors (per floor)</label><input type="number" id="totalDoors" value="6" min="0" max="60" required></div>
+      <div><label for="totalWindows">Number of windows (per floor)</label><input type="number" id="totalWindows" value="6" min="0" max="60" required></div>
     </div>
     <div class="field-grid cols-2" style="margin-top:14px">
       <div><label for="doorSize">Standard door size</label>
@@ -66,11 +66,11 @@
   <details class="block" open>
     <summary>Washrooms, bathrooms &amp; parking</summary>
     <div class="field-grid cols-3">
-      <div><label for="washrooms">Washrooms (per floor)</label><input type="number" id="washrooms" value="1" min="0">
+      <div><label for="washrooms">Washrooms (per floor)</label><input type="number" id="washrooms" value="1" min="0" max="20" required>
         <p class="hint">WC + basin only</p></div>
-      <div><label for="bathrooms">Bathrooms (per floor)</label><input type="number" id="bathrooms" value="1" min="0">
+      <div><label for="bathrooms">Bathrooms (per floor)</label><input type="number" id="bathrooms" value="1" min="0" max="20" required>
         <p class="hint">WC + basin + shower</p></div>
-      <div><label for="parking">Parking (total bays)</label><input type="number" id="parking" value="1" min="0">
+      <div><label for="parking">Parking (total bays)</label><input type="number" id="parking" value="1" min="0" max="100" required>
         <p class="hint">Ground level, not per floor</p></div>
     </div>
   </details>
@@ -90,6 +90,12 @@
   <p class="eyebrow" style="margin-top:24px">Itemized estimate</p>
   <table id="result-table"><tbody></tbody></table>
   <p class="total-cost" id="total-cost"></p>
+  <p class="total-ref" id="total-ref"></p>
+
+  <div class="result-actions">
+    <button type="button" id="copy-summary" class="secondary-btn">Copy summary</button>
+    <button type="button" id="print-summary" class="secondary-btn">Print / Save as PDF</button>
+  </div>
 
   <details class="assumptions">
     <summary>Assumptions &amp; methodology used</summary>
@@ -98,6 +104,7 @@
       <li>Wall height fixed at 10 ft; soil type assumed medium; concrete mix M20; column count auto-estimated from built-up area — all backend defaults.</li>
       <li>Windows assumed external, doors assumed internal (plus one main entrance door), consistent with the earlier version.</li>
       <li>Washroom and bathroom sizes use standard defaults (5x4 ft and 6x5 ft) since only counts are collected on the frontend.</li>
+      <li>The total is shown as a range (±8%) rather than one exact figure, to reflect normal regional rate variance — treat the reference figure below it as a single-number approximation, not a quote.</li>
       <li>This is a preliminary/detailed <em>estimate</em>, not a certified structural design — verify sizing with a licensed structural engineer before construction.</li>
     </ul>
   </details>

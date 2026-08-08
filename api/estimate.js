@@ -57,26 +57,66 @@ const LABOR_PERCENT = 32;
 const INCLUDE_LABOR = true;
 
 const CFT_PER_CUM = 35.3147;
+const MAX_ROOMS = 60;
+const ESTIMATE_RANGE_PERCENT = 8; // shown as a ± band around the total instead of one exact figure
 function ft2m(ft) { return ft * 0.3048; }
 function sqft2sqm(a) { return a * 0.092903; }
-function num(v, fallback) { const n = Number(v); return isFinite(n) && n > 0 ? n : fallback; }
+
+// Every number that reaches this file came from JSON over HTTP — it may have
+// skipped the browser form's `min`/`max` attributes entirely (a direct API
+// call, a future integration, a malformed request). requireNum() is the one
+// gate that actually enforces the limits; nothing upstream can be trusted.
+function requireNum(v, label, opts) {
+  opts = opts || {};
+  const n = Number(v);
+  if (v === undefined || v === null || v === '' || !isFinite(n)) {
+    throw new Error(label + ' is required and must be a number.');
+  }
+  const min = opts.min === undefined ? -Infinity : opts.min;
+  const max = opts.max === undefined ? Infinity : opts.max;
+  if (n < min) throw new Error(label + ' must be at least ' + min + '.');
+  if (n > max) throw new Error(label + ' must be at most ' + max + '.');
+  return n;
+}
+
+function optionalNum(v, label, fallback, opts) {
+  if (v === undefined || v === null || v === '') return fallback;
+  return requireNum(v, label, opts);
+}
 
 function calculateEstimate(input) {
-  const floors = Math.max(1, Math.round(num(input.floors, 1)));
-  const plotLength = num(input.plotLength, 30);
-  const plotWidth = num(input.plotWidth, 30);
-  const rooms = Array.isArray(input.rooms) ? input.rooms.filter(function (r) { return r && r.length && r.width; }) : [];
-  const totalDoors = Math.max(0, Math.round(num(input.totalDoors, 0)));
-  const totalWindows = Math.max(0, Math.round(num(input.totalWindows, 0)));
-  const doorW = num(input.doorWidth, DOOR_AREA_DEFAULT.width);
-  const doorH = num(input.doorHeight, DOOR_AREA_DEFAULT.height);
-  const windowW = num(input.windowWidth, WINDOW_AREA_DEFAULT.width);
-  const windowH = num(input.windowHeight, WINDOW_AREA_DEFAULT.height);
+  const floors = Math.round(requireNum(input.floors, 'Number of floors', { min: 1, max: 12 }));
+  const plotLength = requireNum(input.plotLength, 'Plot length', { min: 10, max: 500 });
+  const plotWidth = requireNum(input.plotWidth, 'Plot width', { min: 10, max: 500 });
+
+  const rawRooms = Array.isArray(input.rooms) ? input.rooms : [];
+  if (rawRooms.length > MAX_ROOMS) {
+    throw new Error('Too many rooms — please keep it under ' + MAX_ROOMS + '.');
+  }
+  // A row with a blank/zero length or width is treated as "not filled in yet"
+  // and dropped, same as before. Anything left has a real, non-zero value in
+  // it, so it gets held to the same min/max as every other room-sized field —
+  // this is what stops a negative or absurd room dimension from slipping through.
+  const rooms = rawRooms
+    .filter(function (r) { return r && r.length && r.width; })
+    .map(function (r, i) {
+      return {
+        length: requireNum(r.length, 'Room ' + (i + 1) + ' length', { min: 4, max: 100 }),
+        width: requireNum(r.width, 'Room ' + (i + 1) + ' width', { min: 4, max: 100 })
+      };
+    });
+
+  const totalDoors = Math.round(requireNum(input.totalDoors, 'Number of doors', { min: 0, max: 60 }));
+  const totalWindows = Math.round(requireNum(input.totalWindows, 'Number of windows', { min: 0, max: 60 }));
+  const doorW = optionalNum(input.doorWidth, 'Door width', DOOR_AREA_DEFAULT.width, { min: 1, max: 20 });
+  const doorH = optionalNum(input.doorHeight, 'Door height', DOOR_AREA_DEFAULT.height, { min: 1, max: 20 });
+  const windowW = optionalNum(input.windowWidth, 'Window width', WINDOW_AREA_DEFAULT.width, { min: 1, max: 20 });
+  const windowH = optionalNum(input.windowHeight, 'Window height', WINDOW_AREA_DEFAULT.height, { min: 1, max: 20 });
   const doorArea = doorW * doorH;
   const windowArea = windowW * windowH;
-  const washrooms = Math.max(0, Math.round(num(input.washrooms, 0)));
-  const bathrooms = Math.max(0, Math.round(num(input.bathrooms, 0)));
-  const parking = Math.max(0, Math.round(num(input.parking, 0)));
+  const washrooms = Math.round(requireNum(input.washrooms, 'Washrooms', { min: 0, max: 20 }));
+  const bathrooms = Math.round(requireNum(input.bathrooms, 'Bathrooms', { min: 0, max: 20 }));
+  const parking = Math.round(requireNum(input.parking, 'Parking bays', { min: 0, max: 100 }));
 
   if (rooms.length === 0 && washrooms === 0 && bathrooms === 0) {
     throw new Error('At least one room, washroom, or bathroom is required.');
@@ -205,6 +245,14 @@ function calculateEstimate(input) {
   const transportCost = materialSubtotal * TRANSPORT_PERCENT / 100;
   const laborCost = INCLUDE_LABOR ? materialSubtotal * LABOR_PERCENT / 100 : 0;
   const grandTotal = materialSubtotal + contingencyCost + transportCost + laborCost;
+  // Real quotes are never one exact rupee figure — shown as a range so the
+  // headline number doesn't claim more precision than a BOQ estimate has.
+  const grandTotalLow = grandTotal * (1 - ESTIMATE_RANGE_PERCENT / 100);
+  const grandTotalHigh = grandTotal * (1 + ESTIMATE_RANGE_PERCENT / 100);
+
+  // A quick plausibility benchmark so a non-engineer can eyeball whether a
+  // big derived quantity looks normal, instead of just trusting the number.
+  const bricksPerSqft = Math.round((numBricksFinal / builtUpAreaTotal) * 10) / 10;
 
   return {
     summary: {
@@ -212,7 +260,8 @@ function calculateEstimate(input) {
       slabThicknessMm: Math.round(slabThicknessM * 1000),
       beamSizeMm: Math.round(beamWidthM * 1000) + ' x ' + Math.round(beamDepthM * 1000),
       columnSize: columnSizeIn + ' x ' + columnSizeIn + ' in, ' + numColumns + ' nos',
-      footingSizeM: footingSideM.toFixed(2) + ' x ' + footingSideM.toFixed(2)
+      footingSizeM: footingSideM.toFixed(2) + ' x ' + footingSideM.toFixed(2),
+      bricksPerSqft: bricksPerSqft
     },
     items: [
       { section: 'Structure', label: 'Excavation', qty: Math.round(excavationVolCft) + ' cft', cost: excavationCost },
@@ -244,7 +293,10 @@ function calculateEstimate(input) {
     laborCost: laborCost,
     laborPercent: LABOR_PERCENT,
     laborIncluded: INCLUDE_LABOR,
-    grandTotal: grandTotal
+    grandTotal: grandTotal,
+    grandTotalLow: grandTotalLow,
+    grandTotalHigh: grandTotalHigh,
+    estimateRangePercent: ESTIMATE_RANGE_PERCENT
   };
 }
 
