@@ -200,3 +200,70 @@ Root cause note: both earlier validation passes (this skill's shortlist item
 1, and the customer-feedback addendum) checked that individual numbers were
 *sane in isolation*. Neither checked *relationships between* numbers. That's
 the category to watch for in any future validation work on this app.
+
+---
+
+## Shortlist #2 — 2026-08-08
+
+Reviewed against: commit `b67c3dd`. Input signal: `customer-feedback`
+Review #4 (first fully hands-on pass in a while — found zero functional
+bugs, one UX nuance). This round's own technical digging looked past the
+app itself at what's *around* it: `package.json` has no `scripts` and no
+dependencies, there is no test file anywhere in the repo, no `vercel.json`
+or CI config, and no analytics of any kind — every finding below came from
+that, not from re-testing the app itself.
+
+### The shortlist
+
+1. **There's no safety net catching a future change that breaks the math.**
+   Every single fix built today — validation, autosave, the range total, the
+   room-vs-plot check — was checked by hand, in a browser, by a person. There
+   is zero automated test covering `calculateEstimate()`, the one function
+   this entire product's trust depends on. The day someone (me, you, or a
+   future contributor) tweaks a rate or a formula and gets the sign wrong,
+   nothing catches it before a customer does. This isn't about "engineering
+   hygiene" for its own sake — it's the single biggest risk to the thing this
+   app is actually for. *Effort: a day, not a redesign — even 5-6 known-good
+   scenarios (the ones already used throughout every review this session)
+   turned into simple assertions would catch most real regressions.*
+2. **The plausibility note can scare someone who did nothing wrong.**
+   Carried over from today's customer review: a real 4-room layout with big,
+   open rooms came back "outside the usual range, worth double-checking,"
+   when it's just how open floor plans work — fewer walls per square foot is
+   expected, not a mistake. Cheap to fix, and it's a trust problem
+   specifically, which is worth more than its size suggests. *Effort: hours.*
+3. **Nobody knows which features are actually used.** Export, Compare, and
+   the whole ±8% range decision were all built on judgment, not data — there
+   is no analytics of any kind, so the next roadmap call will be just as much
+   of a guess as this one was. Doesn't need to be invasive: a single
+   server-side log line per calculation (which fields were touched, no
+   personal data) would turn the next six months of prioritization from
+   guesswork into something informed. *Effort: hours, and it compounds.*
+4. **The public API has no rate limiting.** Validation now stops nonsense
+   input, but nothing stops volume — someone could still hit `/api/estimate`
+   thousands of times a minute. Low urgency while this has no real traffic,
+   but it's the kind of thing that's cheap to add now and expensive to
+   retrofit under an actual incident. *Effort: hours, bundle with the next
+   backend change rather than doing it in isolation.*
+5. **Accessibility is "meaningfully better," which is not the same as
+   "verified."** Still true from the last shortlist: real `aria-label`s and
+   keyboard focus management were added and tested by hand, but no screen
+   reader software has actually been run against this. Don't let "we did an
+   accessibility pass" quietly become "it's accessible" in anyone's head —
+   they're different claims. *Effort: needs a dedicated pass, not a
+   quick fix.*
+
+### Considered, not shortlisted
+- **Scenarios and autosave only live in the browser's `localStorage`.**
+  Switch devices or clear site data and it's gone — no account, no sync.
+  Not wrong for where this product is today, but it should be a decision
+  someone made on purpose, not a default nobody revisited. Flagging it here
+  so it's a known trade-off, not a silent gap — doesn't rank high enough to
+  be actionable this round.
+
+### Delta vs previous shortlist
+Everything from Shortlist #1 and its implementation updates is shipped —
+this is a genuinely new list, not a rehash. The theme shifted from "fix
+what's broken" (done) to "protect what's now working and know what to build
+next" — the kind of list that shows up right after a product stabilizes,
+not before.

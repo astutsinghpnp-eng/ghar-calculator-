@@ -1,8 +1,10 @@
-# Ghar Calculator — UI/UX Review Log
+# Ghar Calculator — UI/UX Log
 
-This file is the memory for the `ui-ux-review` skill. Each review appends a
-dated section. Never delete history — mark items `SHIPPED` / `DROPPED` instead,
-so the log shows a trend over time, not just a snapshot.
+This file is the memory for the `ui-ux-developer` skill (renamed and rewritten
+from `ui-ux-review` on 2026-08-08 — same log, broader mandate: full redesign
+authority, not just fixing measurable issues in the existing system). Each
+entry appends a dated section. Never delete history — mark items `SHIPPED` /
+`DROPPED` instead, so the log shows a trend over time, not just a snapshot.
 
 Status tags: `OPEN`, `SHIPPED` (verified fixed — say how), `DROPPED` (still
 true, deliberately not fixed — say why).
@@ -116,3 +118,71 @@ regressed. The honest answer to "is this enough": items 1-8 are genuinely
 fixed and verified. Cross-browser rendering and a full screen-reader pass
 (as opposed to DOM/ARIA structure checks) remain unverified — flagged, not
 silently assumed done.
+
+---
+
+## Redesign #1 — 2026-08-08
+
+Skill renamed `ui-ux-review` → `ui-ux-developer` and rewritten with a broader
+mandate: the user asked for an actual redesign — font sizes, colors, fonts,
+overall feel — not another pass fixing issues in the existing system.
+
+### Direction: "Warm brick & steel"
+
+The old system (navy blueprint grid, cool cyan, Space Grotesk) read as an
+architect's technical drawing — precise, but cold for a tool a homeowner uses
+to plan their own house, not an engineer's working document. New direction
+draws on the actual materials of the job instead of an arbitrary palette:
+
+- **Color** (6 named values, all in `public/style.css` `:root`):
+  `--navy` repurposed to warm charcoal `#2A2018` (anchor/structural),
+  `--amber` repurposed to brick red `#C1502E` (the accent that does the
+  "catch the eye" work — the primary CTA, focus states, corner brackets),
+  `--amber-deep` `#93381E` (hover), `--cyan` repurposed to warm gold
+  `#E4B876` (text on the dark hero), `--paper` warm off-white `#FAF4EA`,
+  `--error` shifted to a distinct crimson `#A4342A` so it never reads as the
+  same color as the brand accent. Variable *names* kept stable so every
+  existing usage site repainted automatically instead of needing a
+  find-and-replace across the CSS.
+- **Type**: display headings moved from Space Grotesk to **Zilla Slab**
+  (bold, 600/700) — a slab serif was chosen specifically because its blocky
+  letterforms read as "construction/brick" the way a delicate literary serif
+  wouldn't, which sidesteps the generic warm-cream-plus-serif combination
+  that's become the default AI-generated-design look, while still being
+  genuinely warm. Body stayed Inter, data/labels stayed IBM Plex Mono — both
+  were already doing their job, no reason to change them.
+- **Motif**: the hero's blueprint grid became a running-bond brick pattern
+  (encoded inline SVG, exact offset second course), the one deliberate
+  "does this look redesigned" moment rather than changing hex values
+  everywhere and calling it done.
+- **Everything else**: card radius 4px → 10px, buttons/inputs → 6-8px, soft
+  shadows added to panels for depth, the primary CTA switched from charcoal
+  to brick with bumped size/weight since it's the one element whose whole
+  job is to catch the eye first.
+
+### Verification
+- Computed real contrast ratios on the new palette for 18 element/state
+  pairs. Found and fixed one real failure: the skip-link was charcoal text
+  on brick background at 3.38:1 (fails the 4.5:1 minimum) — switched to the
+  same charcoal-bg/white-text treatment used elsewhere, now 15.93:1.
+  Everything else cleared 4.5:1+ on first pass, including the ones closest
+  to the edge: submit button white-on-brick at 4.71:1, error banner 5.63:1,
+  field-error text 6.77:1, compare table labels 6.35:1.
+- Confirmed `document.fonts` shows Zilla Slab 600/700 (the weights actually
+  used) as `loaded`, and `h1`'s computed `font-family` resolves to it — not
+  silently falling back to a system serif.
+- Mobile (375px): `scrollWidth` still equals `innerWidth`, no overflow
+  introduced by the redesign.
+- Touch targets unaffected: remove-room button still measures 44×44px.
+- Console and server logs: no errors.
+- **Not verified this round**: could not get a compositing screenshot (the
+  Browser pane wasn't displaying frames this session) — verification here is
+  entirely computed-value-based, which is real evidence but isn't the same
+  as a human or an AI actually looking at the rendered page. Flagging this
+  rather than claiming a visual check that didn't happen.
+
+### Note for future runs of this skill
+Any earlier `ui-ux-review` finding about a *specific color value* (not a
+structural pattern) no longer applies as stated, since the palette itself
+changed — re-verify against the new values rather than assuming an old fix
+still holds.

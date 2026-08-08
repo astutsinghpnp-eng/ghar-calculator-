@@ -336,3 +336,78 @@ The user asked to fix everything still open. Re-verified live:
 customer — everything above was verified via DOM/network/keyboard checks, not
 a fresh naive first-time-user pass, which is a different (and still valuable)
 kind of scrutiny.
+
+---
+
+## Review #4 — 2026-08-08
+
+Commit at time of review: `b67c3dd`. Tested via: local dev server on
+http://localhost:61363, desktop and mobile (375px) viewports, driven as a
+genuine first-time-this-session customer (real form filling via `form_input`
+and clicks, not DOM injection) rather than DOM/network verification like the
+last two updates — the thing the log itself flagged as still owed.
+
+Scenario: a real 3BHK — 45x35 plot, 2 floors, master 16x14, two bedrooms
+12x11 and 10x10, living room 18x15, 8 doors/10 windows per floor, 2
+washrooms, 2 bathrooms, 2 parking.
+
+### Bugs & repetition
+- Nothing broken found. This is the first review where I didn't find a new
+  bug in the core flow.
+
+### Missing features
+- `RESOLVED` (verified, not just re-checked) **Export and compare both work
+  as advertised.** Used "Save as Scenario A" for real, then "Copy summary" —
+  the copy itself couldn't complete in this sandboxed browser tab (no
+  document focus, a tooling limit, not an app bug) but it degraded exactly
+  the way it's supposed to: a clear on-screen message, not a silent failure.
+
+### UI/UX handling
+- `NEW` **The plausibility note can't tell "unusual" from "wrong."** My
+  realistic 4-room layout came back with "~23.9 bricks/sqft — outside the
+  usual range, worth double-checking your room sizes." That's not actually a
+  mistake — big, few, open rooms genuinely need less brickwork per sqft than
+  many small partitioned ones, since brick volume scales with wall
+  perimeter, not floor area. The note can't distinguish "your inputs are
+  probably wrong" from "you just prefer an open floor plan," so a real
+  customer with a legitimate design gets a mild "something might be off"
+  scare with no way to resolve it beyond re-reading their own numbers. Worth
+  a follow-up: either widen the "normal" framing to something like "outside
+  the typical range for a partitioned layout — expected if you have large,
+  open rooms" or drop the implied judgment entirely and just state the ratio.
+- `RESOLVED` **The total-preview + sticky bar combination genuinely works.**
+  Submitted the real form and saw "Estimated total: ₹28,52,510 – ₹33,48,599"
+  immediately, no scrolling — this was the single biggest complaint across
+  every prior review and it's actually fixed now, not just technically
+  present.
+
+### Trust & transparency
+- `RESOLVED`, and better than expected: **shrunk the plot without shrinking
+  the rooms — the exact kind of mistake a real customer re-measuring their
+  land would make** (updated plot length from 45 to 20, left the 18x15
+  living room untouched). Got a clear, specific rejection: "The rooms,
+  washrooms, and bathrooms on one floor need about 925 sqft, but the plot
+  footprint is only 700 sqft." This is the room-vs-plot fix from earlier
+  today, now confirmed to catch a genuinely realistic mistake, not just the
+  exact repro it was built from.
+
+### Accessibility & mobile
+- Re-checked mobile at 375px with the full 4-room, export+compare flow: no
+  horizontal overflow, total-preview and sticky bar both readable, the
+  Export/Compare button grouping from the UI/UX pass reads clearly stacked.
+  Genuinely usable end to end on a phone-sized viewport, not just
+  non-broken.
+- Noted, not re-tested: autosave restores whatever state was last on
+  screen, including an invalid one (reloaded after the shrunk-plot mistake
+  and got the broken 20ft/18x15 combination back, not the last *successful*
+  calculation). That's defensible — autosave is documented as remembering
+  inputs, not results — but worth knowing it can hand a returning visitor
+  their own unresolved error rather than their last good number.
+
+### Delta vs previous review
+First fully hands-on pass since Review #3's addendum. Found zero functional
+bugs — a first. The one real finding (#1 above) is a nuance in the
+plausibility-note wording, not a defect: it's technically correct but reads
+as more alarmed than the situation warrants for a legitimate open-plan
+layout. Everything else — export, compare, the total-preview fix, the
+room-vs-plot fix, mobile — held up under genuine use, not just re-verification.

@@ -1,14 +1,23 @@
+/* Redesign, 2026-08-08 — "Warm brick & steel." The old palette (navy blueprint
+   grid, cool cyan, amber accent) read as an architect's technical drawing.
+   Ghar Calculator is used by someone planning to build a home, not an
+   engineer — so this leans into the actual materials of the job (brick,
+   steel, warm site light) instead of a cold drafting-table aesthetic.
+   Variable names are kept stable (--navy, --amber, --cyan, --graphite) so
+   every existing usage site repaints automatically; only the values and the
+   two headline swaps below (submit button, hero motif) needed touching. */
 :root {
-  --navy: #14304A;
-  --navy-line: #3E6D8E;
-  --cyan: #8FC1E3;
-  --paper: #FBFAF6;
-  --ink: #1A1A1A;
-  --graphite: #55595F;
-  --amber: #E8A33D;
-  --border: #D8D4C8;
-  --error: #B0432B;
-  --error-bg: #FBEBE6;
+  --navy: #2A2018;        /* was cool navy — now warm charcoal, the anchor/structural color */
+  --navy-line: #6E5138;   /* hero motif line color */
+  --cyan: #E4B876;        /* was cool cyan — now warm gold, for text on the dark hero */
+  --paper: #FAF4EA;       /* warm off-white, was a cooler cream */
+  --ink: #241C17;         /* warm near-black body text */
+  --graphite: #6B5D50;    /* warm secondary text */
+  --amber: #C1502E;       /* the brick red — primary accent, does the "catch the eye" work */
+  --amber-deep: #93381E;  /* hover/pressed state for brick elements */
+  --border: #E3D7C5;      /* warm border */
+  --error: #A4342A;       /* kept distinct from --amber so "error" never reads as "call to action" */
+  --error-bg: #F7E7E1;
 }
 
 * { box-sizing: border-box; }
@@ -24,9 +33,9 @@ body {
   position: absolute;
   left: -9999px;
   top: 0;
-  background: var(--amber);
-  color: var(--navy);
-  font-family: 'Space Grotesk', sans-serif;
+  background: var(--navy);
+  color: #fff;
+  font-family: 'Zilla Slab', serif;
   font-weight: 600;
   font-size: 14px;
   padding: 10px 16px;
@@ -42,14 +51,16 @@ body {
   padding: 56px 24px 48px;
   overflow: hidden;
 }
+/* A running-bond brick pattern instead of a blueprint grid — the single
+   biggest "does this look like a considered redesign" moment, and directly
+   on-theme for a construction estimator. Encoded inline SVG, not a grid of
+   gradients, so the offset second course is exact. */
 .hero-grid {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(var(--navy-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--navy-line) 1px, transparent 1px);
-  background-size: 32px 32px;
-  opacity: 0.25;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='30'%3E%3Cpath d='M0 0H60 M0 15H60 M0 30H60 M0 0V15 M60 0V15 M30 15V30' stroke='%23785A3D' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-size: 60px 30px;
+  opacity: 0.4;
 }
 .hero-content { position: relative; max-width: 680px; margin: 0 auto; }
 .eyebrow {
@@ -61,12 +72,12 @@ body {
   margin: 0 0 12px;
 }
 .panel .eyebrow { color: var(--graphite); }
-h1 { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: clamp(26px, 4vw, 38px); margin: 0 0 12px; }
-.tagline { color: #C9D8E3; margin: 0; font-size: 16px; line-height: 1.6; }
+h1 { font-family: 'Zilla Slab', serif; font-weight: 700; font-size: clamp(30px, 5vw, 44px); line-height: 1.1; margin: 0 0 14px; text-wrap: balance; }
+.tagline { color: #E8DCCC; margin: 0; font-size: 17px; line-height: 1.6; }
 .unit-disclosure {
   font-family: 'Inter', sans-serif;
   font-size: 12.5px;
-  color: #9FB6C7;
+  color: #B8A28A;
   margin: 16px 0 0;
 }
 
@@ -75,12 +86,13 @@ main { max-width: 760px; margin: -24px auto 64px; padding: 0 24px; display: flex
 .block, .panel {
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 10px;
   padding: 22px 24px;
   position: relative;
+  box-shadow: 0 1px 2px rgba(42, 32, 24, 0.04), 0 4px 14px rgba(42, 32, 24, 0.05);
 }
 .block summary {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Zilla Slab', serif;
   font-weight: 600;
   font-size: 16px;
   cursor: pointer;
@@ -104,7 +116,7 @@ input, select {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 14px;
   background: var(--paper);
@@ -126,7 +138,7 @@ input[aria-invalid="true"], .room-row input[aria-invalid="true"] { border-color:
   color: var(--error);
   background: var(--error-bg);
   border: 1px solid var(--error);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 8px 10px;
   margin-top: 10px;
 }
@@ -148,37 +160,39 @@ input[aria-invalid="true"], .room-row input[aria-invalid="true"] { border-color:
 .room-row .ext-check input { width: auto; }
 /* 44x44 matches the standard mobile touch-target minimum (WCAG 2.5.5) —
    was 28x28, too small to tap reliably on a phone. */
-.remove-room { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--graphite); cursor: pointer; width: 44px; height: 44px; }
+.remove-room { background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--graphite); cursor: pointer; width: 44px; height: 44px; }
 .remove-room:hover { border-color: var(--amber); color: var(--amber); }
 
 .secondary-btn {
   margin-top: 14px;
-  padding: 8px 14px;
+  padding: 9px 16px;
   background: none;
-  border: 1px solid var(--navy);
+  border: 1.5px solid var(--navy);
   color: var(--navy);
-  border-radius: 4px;
-  font-family: 'Space Grotesk', sans-serif;
+  border-radius: 8px;
+  font-family: 'Zilla Slab', serif;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
 }
 .secondary-btn:hover { background: var(--navy); color: #fff; }
 
+/* The primary action gets the brick accent, not the charcoal — this is the
+   one button on the page whose entire job is to catch the eye first. */
 button[type="submit"] {
   position: relative;
   width: 100%;
-  padding: 13px 16px;
-  background: var(--navy);
+  padding: 15px 16px;
+  background: var(--amber);
   color: #fff;
   border: none;
-  border-radius: 4px;
-  font-family: 'Space Grotesk', sans-serif;
-  font-weight: 600;
-  font-size: 15px;
+  border-radius: 8px;
+  font-family: 'Zilla Slab', serif;
+  font-weight: 700;
+  font-size: 16px;
   cursor: pointer;
 }
-button[type="submit"]:hover { background: #1D4463; }
+button[type="submit"]:hover { background: var(--amber-deep); }
 button[type="submit"]:disabled { background: var(--graphite); cursor: not-allowed; opacity: 0.75; }
 button[type="submit"].loading { color: transparent; }
 button[type="submit"].loading::after {
@@ -212,11 +226,11 @@ table { width: 100%; border-collapse: collapse; margin-top: 6px; font-family: 'I
 td { padding: 8px 4px; border-bottom: 1px solid var(--border); }
 td:nth-child(2) { text-align: right; color: var(--graphite); }
 td:last-child { text-align: right; font-weight: 500; }
-tr.section-row td { padding-top: 16px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--graphite); border-bottom: 1px solid var(--navy); }
+tr.section-row td { padding-top: 16px; font-family: 'Zilla Slab', serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--graphite); border-bottom: 1px solid var(--navy); }
 tr.subtotal-row td { font-weight: 600; border-top: 1px solid var(--ink); border-bottom: none; }
 .benchmark-note { font-size: 12px; font-style: italic; color: var(--graphite); padding: 2px 4px 10px !important; text-align: left !important; font-weight: 400 !important; }
 
-.total-cost { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 22px; margin: 20px 0 4px; }
+.total-cost { font-family: 'Zilla Slab', serif; font-weight: 700; font-size: 25px; margin: 20px 0 4px; color: var(--navy); }
 .total-ref { font-size: 13px; color: var(--graphite); margin: 0 0 4px; }
 
 /* A preview of the total right after the structural summary, so the number
@@ -224,14 +238,14 @@ tr.subtotal-row td { font-weight: 600; border-top: 1px solid var(--ink); border-
    The full total + reference figure still appears again at the natural end
    of the arithmetic below — this is a preview, not a replacement. */
 .total-preview {
-  background: var(--paper);
-  border: 1px solid var(--amber);
-  border-radius: 4px;
-  padding: 14px 16px;
+  background: linear-gradient(135deg, #FCEDE4, var(--paper));
+  border: 1.5px solid var(--amber);
+  border-radius: 10px;
+  padding: 16px 18px;
   margin: 16px 0 4px;
-  font-family: 'Space Grotesk', sans-serif;
-  font-weight: 600;
-  font-size: 17px;
+  font-family: 'Zilla Slab', serif;
+  font-weight: 700;
+  font-size: 19px;
   color: var(--navy);
 }
 .total-preview .caption {
@@ -274,7 +288,7 @@ tr.subtotal-row td { font-weight: 600; border-top: 1px solid var(--ink); border-
   font-size: 13px;
 }
 .compare-head {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Zilla Slab', serif;
   font-weight: 600;
   font-size: 12px;
   text-transform: uppercase;
@@ -297,7 +311,7 @@ tr.subtotal-row td { font-weight: 600; border-top: 1px solid var(--ink); border-
   background: var(--navy);
   color: #fff;
   padding: 12px 20px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Zilla Slab', serif;
   font-weight: 600;
   font-size: 15px;
   text-align: center;
