@@ -10,17 +10,20 @@
 </head>
 <body>
 
+<a class="skip-link" href="#plotLength">Skip to form</a>
+
 <header class="hero">
   <div class="hero-grid" aria-hidden="true"></div>
   <div class="hero-content">
     <p class="eyebrow">Frontend + backend, on Vercel</p>
     <h1>Ghar cost &amp; steel estimator</h1>
     <p class="tagline">You provide the plot and room details — every calculation runs on the backend.</p>
+    <p class="unit-disclosure">All prices in Indian Rupees (₹) · all dimensions in feet (ft)</p>
   </div>
 </header>
 
 <main>
-<form id="estimate-form">
+<form id="estimate-form" novalidate>
 
   <details class="block" open>
     <summary>Plot &amp; floors</summary>
@@ -79,22 +82,36 @@
   <p class="hint" id="form-status" role="status"></p>
 </form>
 
-<section class="panel result-panel" id="result-panel" hidden>
+<section class="panel result-panel" id="result-panel" tabindex="-1" hidden>
   <div class="corner tl" aria-hidden="true"></div>
   <div class="corner tr" aria-hidden="true"></div>
   <div class="corner bl" aria-hidden="true"></div>
   <div class="corner br" aria-hidden="true"></div>
   <p class="eyebrow">Structural summary</p>
-  <table id="summary-table"><tbody></tbody></table>
+  <table id="summary-table" aria-label="Structural summary"><tbody></tbody></table>
+
+  <div class="total-preview" id="total-preview"></div>
 
   <p class="eyebrow" style="margin-top:24px">Itemized estimate</p>
-  <table id="result-table"><tbody></tbody></table>
+  <table id="result-table" aria-label="Itemized cost estimate"><tbody></tbody></table>
   <p class="total-cost" id="total-cost"></p>
   <p class="total-ref" id="total-ref"></p>
 
-  <div class="result-actions">
-    <button type="button" id="copy-summary" class="secondary-btn">Copy summary</button>
-    <button type="button" id="print-summary" class="secondary-btn">Print / Save as PDF</button>
+  <div class="action-groups">
+    <div class="action-group">
+      <span class="action-group-label">Export</span>
+      <div class="result-actions">
+        <button type="button" id="copy-summary" class="secondary-btn">Copy summary</button>
+        <button type="button" id="print-summary" class="secondary-btn">Print / Save as PDF</button>
+      </div>
+    </div>
+    <div class="action-group">
+      <span class="action-group-label">Compare</span>
+      <div class="result-actions">
+        <button type="button" id="save-scenario-a" class="secondary-btn">Save as Scenario A</button>
+        <button type="button" id="save-scenario-b" class="secondary-btn">Save as Scenario B</button>
+      </div>
+    </div>
   </div>
 
   <details class="assumptions">
@@ -109,7 +126,18 @@
     </ul>
   </details>
 </section>
+
+<section class="panel compare-panel" id="compare-panel" hidden>
+  <p class="eyebrow">Compare scenarios</p>
+  <p class="hint">Save two estimates (e.g. 2 floors vs 3 floors) to see them side by side.</p>
+  <div class="compare-grid" id="compare-grid"></div>
+  <button type="button" id="clear-scenarios" class="secondary-btn">Clear saved scenarios</button>
+</section>
 </main>
+
+<div class="sticky-total" id="sticky-total" hidden>
+  <span id="sticky-total-text"></span>
+</div>
 
 <script src="script.js"></script>
 </body>

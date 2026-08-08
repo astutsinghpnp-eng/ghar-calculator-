@@ -4,12 +4,19 @@
 
 const roomList = document.getElementById('room-list');
 
+// Each room row gets a unique, stable id (independent of its position, so it
+// survives other rows being removed) — used for the aria-label announced to
+// screen readers and for wiring up inline field errors below.
+let roomIdCounter = 0;
+
 function addRoomRow(length, width) {
+  roomIdCounter += 1;
+  const n = roomIdCounter;
   const row = document.createElement('div');
   row.className = 'room-row';
   row.innerHTML =
-    '<input class="room-length" type="number" min="1" max="100" value="' + length + '">' +
-    '<input class="room-width" type="number" min="1" max="100" value="' + width + '">' +
+    '<input class="room-length" id="room-' + n + '-length" type="number" min="4" max="100" value="' + length + '" aria-label="Room length (ft)">' +
+    '<input class="room-width" id="room-' + n + '-width" type="number" min="4" max="100" value="' + width + '" aria-label="Room width (ft)">' +
     '<button type="button" class="remove-room" aria-label="Remove room">✕</button>';
   row.querySelector('.remove-room').addEventListener('click', function () { row.remove(); saveForm(); });
   roomList.appendChild(row);
@@ -32,6 +39,92 @@ function readRooms() {
 function sizeFromPreset(preset) {
   const parts = preset.split('x').map(Number);
   return { width: parts[0], height: parts[1] };
+}
+
+// --- Inline field validation. Mirrors the limits api/estimate.js enforces
+// server-side, so a mistake gets caught right next to the field that has it
+// instead of only as one banner at the top after a round trip to the server. ---
+const FIELD_RULES = {
+  plotLength: { label: 'Plot length', min: 10, max: 500 },
+  plotWidth: { label: 'Plot width', min: 10, max: 500 },
+  totalDoors: { label: 'Number of doors', min: 0, max: 60 },
+  totalWindows: { label: 'Number of windows', min: 0, max: 60 },
+  washrooms: { label: 'Washrooms', min: 0, max: 20 },
+  bathrooms: { label: 'Bathrooms', min: 0, max: 20 },
+  parking: { label: 'Parking bays', min: 0, max: 100 }
+};
+
+function showFieldError(id, message) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let err = document.getElementById(id + '-error');
+  if (!err) {
+    err = document.createElement('p');
+    err.className = 'field-error';
+    err.id = id + '-error';
+    el.insertAdjacentElement('afterend', err);
+  }
+  err.textContent = message;
+  el.setAttribute('aria-invalid', 'true');
+  el.setAttribute('aria-describedby', id + '-error');
+}
+
+function clearFieldError(id) {
+  const el = document.getElementById(id);
+  const err = document.getElementById(id + '-error');
+  if (err) err.remove();
+  if (el) {
+    el.removeAttribute('aria-invalid');
+    el.removeAttribute('aria-describedby');
+  }
+}
+
+function validateField(id) {
+  const rule = FIELD_RULES[id];
+  if (!rule) return true;
+  const el = document.getElementById(id);
+  const n = Number(el.value);
+  if (el.value === '' || !isFinite(n)) {
+    showFieldError(id, rule.label + ' is required.');
+    return false;
+  }
+  if (n < rule.min || n > rule.max) {
+    showFieldError(id, rule.label + ' must be between ' + rule.min + ' and ' + rule.max + '.');
+    return false;
+  }
+  clearFieldError(id);
+  return true;
+}
+
+// A room row with one side blank is treated as "not filled in yet" and
+// silently dropped — same rule api/estimate.js uses. Only rows where both
+// sides have a value get held to the 4-100 ft range.
+function validateRoomRow(row) {
+  const lengthEl = row.querySelector('.room-length');
+  const widthEl = row.querySelector('.room-width');
+  if (!lengthEl || !widthEl) return true;
+  const lengthNum = Number(lengthEl.value);
+  const widthNum = Number(widthEl.value);
+  const bothFilled = lengthEl.value !== '' && lengthNum !== 0 && widthEl.value !== '' && widthNum !== 0;
+  if (!bothFilled) {
+    clearFieldError(lengthEl.id);
+    clearFieldError(widthEl.id);
+    return true;
+  }
+  let ok = true;
+  if (!isFinite(lengthNum) || lengthNum < 4 || lengthNum > 100) {
+    showFieldError(lengthEl.id, 'Room length must be between 4 and 100 ft.');
+    ok = false;
+  } else {
+    clearFieldError(lengthEl.id);
+  }
+  if (!isFinite(widthNum) || widthNum < 4 || widthNum > 100) {
+    showFieldError(widthEl.id, 'Room width must be between 4 and 100 ft.');
+    ok = false;
+  } else {
+    clearFieldError(widthEl.id);
+  }
+  return ok;
 }
 
 // --- Autosave: remember the visitor's last session in this browser, so an
@@ -98,11 +191,40 @@ function val(id) { return Number(document.getElementById(id).value) || 0; }
 form.addEventListener('input', saveForm);
 form.addEventListener('change', saveForm);
 
+// Re-validate a field the moment it's edited, so a corrected value clears its
+// error immediately instead of waiting for the next submit attempt.
+form.addEventListener('input', function (e) {
+  const id = e.target.id;
+  if (FIELD_RULES[id]) { validateField(id); return; }
+  if (e.target.classList && (e.target.classList.contains('room-length') || e.target.classList.contains('room-width'))) {
+    validateRoomRow(e.target.closest('.room-row'));
+  }
+});
+
+function validateWholeForm() {
+  let ok = true;
+  Object.keys(FIELD_RULES).forEach(function (id) { if (!validateField(id)) ok = false; });
+  Array.prototype.forEach.call(roomList.querySelectorAll('.room-row'), function (row) {
+    if (!validateRoomRow(row)) ok = false;
+  });
+  return ok;
+}
+
 form.addEventListener('submit', function (e) {
   e.preventDefault();
-  statusEl.textContent = 'Calculating…';
   statusEl.classList.remove('error');
+
+  if (!validateWholeForm()) {
+    statusEl.textContent = 'Please fix the highlighted fields below.';
+    statusEl.classList.add('error');
+    const firstInvalid = form.querySelector('[aria-invalid="true"]');
+    if (firstInvalid) firstInvalid.focus();
+    return;
+  }
+
+  statusEl.textContent = 'Calculating…';
   submitBtn.disabled = true;
+  submitBtn.classList.add('loading');
 
   const door = sizeFromPreset(document.getElementById('doorSize').value);
   const win = sizeFromPreset(document.getElementById('windowSize').value);
@@ -136,11 +258,13 @@ form.addEventListener('submit', function (e) {
     .catch(function (err) {
       // A rejected submission must not leave the previous result looking current.
       resultPanel.hidden = true;
+      document.getElementById('sticky-total').hidden = true;
       statusEl.textContent = 'Could not calculate: ' + err.message;
       statusEl.classList.add('error');
     })
     .finally(function () {
       submitBtn.disabled = false;
+      submitBtn.classList.remove('loading');
     });
 });
 
@@ -179,10 +303,19 @@ function render(data) {
   }
   resultBody.innerHTML = rows;
 
-  totalCostEl.textContent = 'Estimated total: ' + money(data.grandTotalLow) + ' – ' + money(data.grandTotalHigh);
+  const totalText = 'Estimated total: ' + money(data.grandTotalLow) + ' – ' + money(data.grandTotalHigh);
+  totalCostEl.textContent = totalText;
   totalRefEl.textContent = 'Reference midpoint: ' + money(data.grandTotal) + ' (range reflects ±' + data.estimateRangePercent + '% regional rate variance)';
+  document.getElementById('sticky-total-text').textContent = totalText;
+  document.getElementById('total-preview').innerHTML = totalText + '<span class="caption">Full breakdown below ↓</span>';
+
   resultPanel.hidden = false;
   resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Move focus to the result so keyboard and screen-reader users land on the
+  // new content instead of just seeing the page scroll underneath them.
+  resultPanel.focus({ preventScroll: true });
+
+  watchStickyTotal();
 }
 
 function buildSummaryText(data) {
@@ -227,3 +360,85 @@ document.getElementById('copy-summary').addEventListener('click', function () {
 });
 
 document.getElementById('print-summary').addEventListener('click', function () { window.print(); });
+
+// --- Sticky total: once the main total scrolls out of view, pin a compact
+// copy of it to the bottom of the screen so the number that matters is
+// never more than a glance away on a long itemized table. ---
+const stickyTotalEl = document.getElementById('sticky-total');
+let stickyObserver = null;
+
+function watchStickyTotal() {
+  if (stickyObserver) stickyObserver.disconnect();
+  stickyObserver = new IntersectionObserver(function (entries) {
+    const mainTotalVisible = entries[0].isIntersecting;
+    stickyTotalEl.hidden = mainTotalVisible || resultPanel.hidden;
+  }, { threshold: 0 });
+  stickyObserver.observe(totalCostEl);
+}
+
+// --- Compare scenarios: save the current result into slot A or B so two
+// options (e.g. 2 floors vs 3 floors) can be looked at side by side instead
+// of re-entering the whole form to check one against the other. ---
+const SCENARIO_KEY = 'gharCalculatorScenarios.v1';
+
+function loadScenarios() {
+  try { return JSON.parse(localStorage.getItem(SCENARIO_KEY)) || {}; } catch (e) { return {}; }
+}
+
+function saveScenarios(scenarios) {
+  try { localStorage.setItem(SCENARIO_KEY, JSON.stringify(scenarios)); } catch (e) { /* storage unavailable */ }
+}
+
+function findItem(data, label) {
+  return (data.items || []).filter(function (i) { return i.label === label; })[0];
+}
+
+function compareCell(scenario, fn) { return scenario ? fn(scenario) : '—'; }
+
+function renderCompare() {
+  const scenarios = loadScenarios();
+  const a = scenarios.A;
+  const b = scenarios.B;
+  const panel = document.getElementById('compare-panel');
+  const grid = document.getElementById('compare-grid');
+
+  if (!a && !b) { panel.hidden = true; return; }
+  panel.hidden = false;
+
+  const rows = [
+    ['', 'Scenario A', 'Scenario B'],
+    ['Floors', compareCell(a, function (s) { return s.inputs.floors; }), compareCell(b, function (s) { return s.inputs.floors; })],
+    ['Built-up area', compareCell(a, function (s) { return fmt(s.data.summary.builtUpAreaTotal) + ' sqft'; }), compareCell(b, function (s) { return fmt(s.data.summary.builtUpAreaTotal) + ' sqft'; })],
+    ['Cement', compareCell(a, function (s) { const i = findItem(s.data, 'Cement (incl. PCC)'); return i ? i.qty : '—'; }), compareCell(b, function (s) { const i = findItem(s.data, 'Cement (incl. PCC)'); return i ? i.qty : '—'; })],
+    ['TMT steel', compareCell(a, function (s) { const i = findItem(s.data, 'TMT steel'); return i ? i.qty : '—'; }), compareCell(b, function (s) { const i = findItem(s.data, 'TMT steel'); return i ? i.qty : '—'; })],
+    ['Bricks', compareCell(a, function (s) { const i = findItem(s.data, 'Brickwork'); return i ? i.qty : '—'; }), compareCell(b, function (s) { const i = findItem(s.data, 'Brickwork'); return i ? i.qty : '—'; })],
+    ['Estimated total', compareCell(a, function (s) { return money(s.data.grandTotalLow) + '–' + money(s.data.grandTotalHigh); }), compareCell(b, function (s) { return money(s.data.grandTotalLow) + '–' + money(s.data.grandTotalHigh); })]
+  ];
+
+  grid.innerHTML = rows.map(function (r, i) {
+    const cls = i === 0 ? 'compare-row compare-head' : 'compare-row';
+    return '<div class="' + cls + '"><span class="compare-label">' + r[0] + '</span><span class="compare-val">' + r[1] + '</span><span class="compare-val">' + r[2] + '</span></div>';
+  }).join('');
+}
+
+function saveScenario(slot, btn) {
+  if (!lastRenderedData) return;
+  const scenarios = loadScenarios();
+  scenarios[slot] = { savedAt: Date.now(), data: lastRenderedData, inputs: serializeForm() };
+  saveScenarios(scenarios);
+  renderCompare();
+  if (btn) {
+    const original = btn.textContent;
+    btn.textContent = 'Saved!';
+    setTimeout(function () { btn.textContent = original; }, 1200);
+  }
+}
+
+document.getElementById('save-scenario-a').addEventListener('click', function () { saveScenario('A', this); });
+document.getElementById('save-scenario-b').addEventListener('click', function () { saveScenario('B', this); });
+document.getElementById('clear-scenarios').addEventListener('click', function () {
+  try { localStorage.removeItem(SCENARIO_KEY); } catch (e) { /* storage unavailable */ }
+  renderCompare();
+});
+
+renderCompare(); // restore any scenarios saved in a previous session

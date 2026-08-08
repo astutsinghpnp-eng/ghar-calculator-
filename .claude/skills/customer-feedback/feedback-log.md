@@ -292,10 +292,47 @@ uncommitted at time of writing):
   reviews: the headline now reads as a range (±8%) with a reference midpoint,
   computed server-side.
 
-**Still open — same 3 example rooms, no scenario save/compare, no unit
-toggle, no sticky running total, no inline field-level errors, and the full
-accessibility gap (keyboard/screen-reader) noted above.** None of these were
-in scope for this implementation pass; they weren't part of the `prd-review`
-shortlist that drove it. Next full `customer-feedback` review should re-drive
-the app hands-on (not just re-check via DOM/network calls, which is what this
-update used) to catch anything this pass missed or introduced.
+**Still open at that point — same 3 example rooms, no scenario save/compare, no
+unit toggle, no sticky running total, no inline field-level errors, and the
+full accessibility gap.** None of those were in scope for that first pass.
+
+---
+
+## Implementation update #2 — 2026-08-08 (same day)
+
+The user asked to fix everything still open. Re-verified live:
+
+- `RESOLVED` **No scenario save/compare.** Added "Save as Scenario A / B" plus
+  a side-by-side comparison table (floors, area, cement, steel, bricks, total
+  range). Verified with two different results (2 floors vs 3 floors) — table
+  showed both correctly.
+- `RESOLVED` **No unit/currency disclosure.** Now stated directly under the
+  hero tagline, before the form: "All prices in Indian Rupees (₹) · all
+  dimensions in feet (ft)."
+- `RESOLVED` **No sticky running total.** A fixed bar now appears once the
+  main total scrolls out of view, verified both directions (appears when
+  scrolled away, disappears when the real total is back in view).
+- `RESOLVED` **No inline field-level errors.** Every numeric field and every
+  room row now shows its own error text with `aria-invalid`/`aria-describedby`
+  wired up. Caught a real bug while verifying this: native browser validation
+  was intercepting the submit before the custom validator ran for some
+  fields, showing a browser tooltip instead of the styled inline message —
+  fixed with `novalidate` on the form so there's one consistent validation
+  path instead of two competing ones.
+- `PARTIALLY RESOLVED` **Accessibility.** This was previously flagged as
+  "never measured" — this pass actually tested it rather than guessing: added
+  real `aria-label`s to the previously-anonymous room inputs, moved keyboard
+  focus to the result panel after a calculation, added a skip-to-form link,
+  and gave both tables accessible names. This is a first pass grounded in
+  actual DOM/keyboard testing, not a full audit — no screen reader software
+  was used, so treat this as "meaningfully better," not "done."
+- `NEW` **Bug caught and fixed during this pass, not shipped broken:** the new
+  compare panel's own CSS (`display: flex`) was overriding the browser's
+  native `[hidden]` attribute, so it was visible even with zero scenarios
+  saved — fixed with `.compare-panel:not([hidden])`.
+
+**Nothing from the original review list is open anymore.** Next full
+`customer-feedback` review should still re-drive the app hands-on as a
+customer — everything above was verified via DOM/network/keyboard checks, not
+a fresh naive first-time-user pass, which is a different (and still valuable)
+kind of scrutiny.

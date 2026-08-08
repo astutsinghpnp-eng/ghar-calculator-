@@ -20,6 +20,21 @@ body {
   color: var(--ink);
 }
 
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--amber);
+  color: var(--navy);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 16px;
+  z-index: 100;
+  border-radius: 0 0 4px 0;
+}
+.skip-link:focus { left: 0; }
+
 .hero {
   position: relative;
   background: var(--navy);
@@ -45,9 +60,15 @@ body {
   color: var(--cyan);
   margin: 0 0 12px;
 }
-.result-panel .eyebrow { color: var(--graphite); }
+.panel .eyebrow { color: var(--graphite); }
 h1 { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: clamp(26px, 4vw, 38px); margin: 0 0 12px; }
 .tagline { color: #C9D8E3; margin: 0; font-size: 16px; line-height: 1.6; }
+.unit-disclosure {
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  color: #9FB6C7;
+  margin: 16px 0 0;
+}
 
 main { max-width: 760px; margin: -24px auto 64px; padding: 0 24px; display: flex; flex-direction: column; gap: 20px; }
 
@@ -90,6 +111,14 @@ input, select {
   color: var(--ink);
 }
 input:focus, select:focus { outline: 2px solid var(--amber); outline-offset: 1px; border-color: var(--amber); }
+input[aria-invalid="true"], .room-row input[aria-invalid="true"] { border-color: var(--error); background: var(--error-bg); }
+.field-error {
+  grid-column: span 1;
+  font-size: 12px;
+  color: var(--error);
+  margin: 4px 0 0;
+  font-weight: 500;
+}
 .hint { font-size: 12px; color: var(--graphite); margin: 6px 0 0; }
 .hint.error {
   font-size: 13px;
@@ -106,7 +135,7 @@ input:focus, select:focus { outline: 2px solid var(--amber); outline-offset: 1px
 
 .room-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 28px;
+  grid-template-columns: 1fr 1fr 44px;
   gap: 8px;
   align-items: center;
   padding: 8px 0;
@@ -117,7 +146,9 @@ input:focus, select:focus { outline: 2px solid var(--amber); outline-offset: 1px
 .room-row select, .room-row input[type="number"] { padding: 7px 8px; font-size: 13px; }
 .room-row .ext-check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .room-row .ext-check input { width: auto; }
-.remove-room { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--graphite); cursor: pointer; width: 28px; height: 28px; }
+/* 44x44 matches the standard mobile touch-target minimum (WCAG 2.5.5) —
+   was 28x28, too small to tap reliably on a phone. */
+.remove-room { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--graphite); cursor: pointer; width: 44px; height: 44px; }
 .remove-room:hover { border-color: var(--amber); color: var(--amber); }
 
 .secondary-btn {
@@ -135,6 +166,7 @@ input:focus, select:focus { outline: 2px solid var(--amber); outline-offset: 1px
 .secondary-btn:hover { background: var(--navy); color: #fff; }
 
 button[type="submit"] {
+  position: relative;
   width: 100%;
   padding: 13px 16px;
   background: var(--navy);
@@ -148,9 +180,28 @@ button[type="submit"] {
 }
 button[type="submit"]:hover { background: #1D4463; }
 button[type="submit"]:disabled { background: var(--graphite); cursor: not-allowed; opacity: 0.75; }
+button[type="submit"].loading { color: transparent; }
+button[type="submit"].loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  button[type="submit"].loading::after { animation: none; }
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
 button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
 .result-panel { border-color: var(--navy); }
+.result-panel:focus { outline: 2px solid var(--amber); outline-offset: -2px; }
 .corner { position: absolute; width: 14px; height: 14px; }
 .corner.tl { top: -1px; left: -1px; border-top: 2px solid var(--amber); border-left: 2px solid var(--amber); }
 .corner.tr { top: -1px; right: -1px; border-top: 2px solid var(--amber); border-right: 2px solid var(--amber); }
@@ -163,20 +214,99 @@ td:nth-child(2) { text-align: right; color: var(--graphite); }
 td:last-child { text-align: right; font-weight: 500; }
 tr.section-row td { padding-top: 16px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--graphite); border-bottom: 1px solid var(--navy); }
 tr.subtotal-row td { font-weight: 600; border-top: 1px solid var(--ink); border-bottom: none; }
-.benchmark-note { font-size: 12px; font-style: italic; color: var(--graphite); padding: 2px 4px 10px !important; }
+.benchmark-note { font-size: 12px; font-style: italic; color: var(--graphite); padding: 2px 4px 10px !important; text-align: left !important; font-weight: 400 !important; }
 
 .total-cost { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 22px; margin: 20px 0 4px; }
 .total-ref { font-size: 13px; color: var(--graphite); margin: 0 0 4px; }
 
-.result-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+/* A preview of the total right after the structural summary, so the number
+   that matters most doesn't require scrolling past a 20-row table first.
+   The full total + reference figure still appears again at the natural end
+   of the arithmetic below — this is a preview, not a replacement. */
+.total-preview {
+  background: var(--paper);
+  border: 1px solid var(--amber);
+  border-radius: 4px;
+  padding: 14px 16px;
+  margin: 16px 0 4px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--navy);
+}
+.total-preview .caption {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  margin-top: 4px;
+}
+
+.action-groups { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.action-group-label {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  margin-bottom: 6px;
+}
+.result-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .result-actions .secondary-btn { margin-top: 0; }
 
 .assumptions { margin-top: 20px; font-size: 13px; color: var(--graphite); }
 .assumptions summary { cursor: pointer; font-weight: 500; color: var(--ink); }
 .assumptions ul { margin: 10px 0 0; padding-left: 18px; line-height: 1.6; }
 
+.compare-panel:not([hidden]) { display: flex; flex-direction: column; gap: 4px; }
+.compare-grid { display: flex; flex-direction: column; margin-top: 10px; }
+.compare-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 8px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+}
+.compare-head {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--graphite);
+  border-bottom: 1px solid var(--navy);
+}
+.compare-label { color: var(--graphite); }
+.compare-val { text-align: right; }
+#clear-scenarios { margin-top: 16px; }
+@media (max-width: 480px) {
+  .compare-row { grid-template-columns: 1.15fr 1fr 1fr; gap: 6px; font-size: 11.5px; padding: 8px 2px; }
+}
+
+.sticky-total {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--navy);
+  color: #fff;
+  padding: 12px 20px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  text-align: center;
+  z-index: 40;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.15);
+}
+
 @media print {
-  .hero, form, .result-actions { display: none !important; }
+  .hero, form, .action-groups, .sticky-total, .skip-link, #clear-scenarios { display: none !important; }
   body { background: #fff; }
   main { margin: 0; padding: 0; max-width: 100%; }
   .result-panel { border: none; padding: 0; }

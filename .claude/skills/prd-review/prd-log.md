@@ -125,3 +125,49 @@ doesn't re-flag these as open:
 **Still open, unchanged:** named scenario compare and accessibility — neither
 was in scope for this pass; both remain flagged in prior shortlists as needing
 their own work before they can be prioritized.
+
+---
+
+## Implementation update #2 — 2026-08-08 (same day)
+
+The user asked to fix everything still open, including the two items
+deliberately deferred above plus three more from the underlying
+`customer-feedback` log that were never on a shortlist at all (unit
+disclosure, sticky total, inline field errors). All five built and verified
+live:
+
+7. `SHIPPED` **Scenario compare.** Added "Save as Scenario A / B" buttons and
+   a comparison table (floors, built-up area, cement, steel, bricks, total
+   range). Verified: saved a 2-floor result as A, a 3-floor result as B,
+   confirmed the table showed both side by side with correct, distinct
+   numbers for each.
+8. `SHIPPED` **Accessibility — first real pass, not just guessing.** Actually
+   tested this time rather than assumed: room inputs got unique ids + real
+   `aria-label`s (previously anonymous to a screen reader), result panel gets
+   keyboard focus after a calculation instead of just visually scrolling,
+   added a skip-to-form link (verified via `.click()` — a synthetic Enter
+   keypress didn't trigger native link activation in the test tool, which is
+   a tooling quirk, not an app bug), and tables got `aria-label`s. This is a
+   first pass, not a full audit — screen-reader software wasn't used to
+   verify, only DOM/ARIA structure and keyboard tab order.
+9. `SHIPPED` **Unit/currency disclosure.** Added directly under the hero
+   tagline: "All prices in Indian Rupees (₹) · all dimensions in feet (ft)."
+10. `SHIPPED` **Sticky running total.** A fixed bar appears once the main
+    total scrolls out of view (`IntersectionObserver`-driven), confirmed to
+    show/hide correctly by scrolling the total in and out of the viewport.
+11. `SHIPPED` **Inline field-level errors.** Each numeric field and each room
+    row now shows its own error message with `aria-invalid`/`aria-describedby`
+    wired up, instead of only a top banner. Found and fixed a real bug during
+    verification: native HTML5 `required`/`min`/`max` validation was
+    intercepting the submit before the custom validator ran in some cases,
+    showing a browser tooltip instead of the styled inline error — fixed by
+    adding `novalidate` to the form and relying on one consistent validation
+    path.
+
+One bug caught and fixed mid-implementation (not shipped broken): the compare
+panel's own CSS (`display: flex`) was overriding the browser's native
+`[hidden]` behavior, so it showed up even with zero saved scenarios — fixed
+with `.compare-panel:not([hidden])` instead of an unconditional `display`.
+
+**Nothing left open from either shortlist.** Everything raised across all
+`customer-feedback` reviews and both `prd-review` shortlists is now shipped.
