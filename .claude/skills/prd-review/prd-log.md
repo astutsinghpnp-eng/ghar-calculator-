@@ -171,3 +171,32 @@ with `.compare-panel:not([hidden])` instead of an unconditional `display`.
 
 **Nothing left open from either shortlist.** Everything raised across all
 `customer-feedback` reviews and both `prd-review` shortlists is now shipped.
+
+---
+
+## Bug found by the user, not by either skill — 2026-08-08 (same day)
+
+While actually testing the running app themselves, the user found a real gap
+neither skill's validation pass had covered: a room's dimensions were only
+checked against their own min/max (4-100 ft) and the plot's dimensions were
+only checked against their own min/max (10-500 ft) — nothing cross-checked
+that a room actually *fits inside* the plot. A 10x23 ft plot with a 12x42 ft
+room passed validation and produced a full priced estimate.
+
+- `SHIPPED` **Room-vs-plot dimension check.** Each room's length/width is now
+  rejected if it exceeds the plot's longer side. Verified with the user's
+  exact numbers (plot 10x23, room 12x42) — now `400`: "Room 1 (12 x 42 ft) is
+  larger than the plot itself (10 x 23 ft)."
+- `SHIPPED` **Aggregate footprint check, added proactively alongside it.**
+  A single oversized room isn't the only way this breaks — three individually
+  valid 12x12 rooms on a 12x12 plot (144 sqft) each pass their own min/max but
+  together need 540 sqft. Verified this is now also rejected, with the actual
+  numbers stated in the error.
+- Verified a known-good baseline scenario (the one used throughout every
+  other review) still returns `200` with the same total as before — no
+  regression.
+
+Root cause note: both earlier validation passes (this skill's shortlist item
+1, and the customer-feedback addendum) checked that individual numbers were
+*sane in isolation*. Neither checked *relationships between* numbers. That's
+the category to watch for in any future validation work on this app.

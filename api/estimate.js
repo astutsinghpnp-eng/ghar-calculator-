@@ -106,6 +106,18 @@ function calculateEstimate(input) {
       };
     });
 
+  // A room's own min/max don't stop it from being larger than the plot it's
+  // supposedly built on — that needs comparing against plotLength/plotWidth
+  // directly. A room can be laid out either way round, so check each side
+  // against the plot's longer dimension rather than assuming a fixed orientation.
+  const maxPlotSide = Math.max(plotLength, plotWidth);
+  rooms.forEach(function (r, i) {
+    if (r.length > maxPlotSide || r.width > maxPlotSide) {
+      throw new Error('Room ' + (i + 1) + ' (' + r.length + ' x ' + r.width + ' ft) is larger ' +
+        'than the plot itself (' + plotLength + ' x ' + plotWidth + ' ft) — check the room dimensions.');
+    }
+  });
+
   const totalDoors = Math.round(requireNum(input.totalDoors, 'Number of doors', { min: 0, max: 60 }));
   const totalWindows = Math.round(requireNum(input.totalWindows, 'Number of windows', { min: 0, max: 60 }));
   const doorW = optionalNum(input.doorWidth, 'Door width', DOOR_AREA_DEFAULT.width, { min: 1, max: 20 });
@@ -136,6 +148,17 @@ function calculateEstimate(input) {
   const builtUpAreaPerFloor = roomAreaSum * (1 + CIRCULATION_ALLOWANCE);
   const builtUpAreaTotal = builtUpAreaPerFloor * floors;
   const perimeter = 2 * (plotLength + plotWidth);
+
+  // Every floor shares the same footprint as the plot (this tool doesn't
+  // model setbacks), so the rooms on one floor can't add up to more area
+  // than the plot itself provides — even if no single room broke that rule
+  // on its own.
+  const plotFootprintArea = plotLength * plotWidth;
+  if (builtUpAreaPerFloor > plotFootprintArea) {
+    throw new Error('The rooms, washrooms, and bathrooms on one floor need about ' +
+      Math.round(builtUpAreaPerFloor) + ' sqft, but the plot footprint is only ' +
+      Math.round(plotFootprintArea) + ' sqft. Reduce room sizes/count or increase the plot size.');
+  }
 
   const numColumns = Math.max(4, Math.round(builtUpAreaPerFloor * COLUMNS_PER_SQFT));
 
