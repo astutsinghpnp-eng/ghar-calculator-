@@ -105,11 +105,16 @@ function showStep(step) {
 function openGate(dismissible) {
   gateDismissible = !!dismissible;
   gate.hidden = false;
+  // Hide the app underneath — otherwise a screen's own roof-triangle card
+  // (e.g. the simple-upload screen) keeps rendering behind the gate's
+  // roof-triangle backdrop and the two overlap into a double-roof glitch.
+  appShell.hidden = true;
   showStep(stepChoose);
 }
 
 function closeGate() {
   gate.hidden = true;
+  appShell.hidden = false;
 }
 
 function applyPersonaUI(persona) {
