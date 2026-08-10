@@ -4,225 +4,315 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ghar cost &amp; steel estimator</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/lucide@latest" defer></script>
 </head>
 <body>
 
 <a class="skip-link" href="#plotLength">Skip to form</a>
+<div id="dust-layer" aria-hidden="true"></div>
+<input type="file" id="map-upload-input" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" hidden>
 
-<div class="persona-gate" id="persona-gate">
-  <div class="persona-gate-card" role="dialog" aria-modal="true" aria-labelledby="persona-gate-title">
-    <div class="persona-gate-mark" aria-hidden="true">G</div>
+<!-- ============================== PERSONA GATE ============================== -->
+<div class="dialog-backdrop" id="persona-gate">
+  <div style="width:min(560px,100%)">
+    <div class="dialog-roof"></div>
+    <div class="dialog-card fade-up" role="dialog" aria-modal="true" aria-labelledby="persona-gate-title">
 
-    <div class="persona-step" id="step-choose">
-      <p class="persona-gate-eyebrow">Before we start</p>
-      <h2 id="persona-gate-title">What brings you here today?</h2>
-      <p class="persona-gate-sub">Tell us a little about yourself so we can show you the right experience.</p>
-      <div class="persona-choice-row">
-        <button type="button" class="persona-choice-btn" id="choose-individual">
-          <span class="persona-choice-title">Building my own home</span>
-          <span class="persona-choice-sub">A single house, for myself or my family</span>
-        </button>
-        <button type="button" class="persona-choice-btn" id="choose-business">
-          <span class="persona-choice-title">Business / Contractor</span>
-          <span class="persona-choice-sub">Estimating for clients or multiple projects</span>
-        </button>
+      <div id="step-choose">
+        <p class="card-kicker" style="margin-bottom:var(--space-2)">Before we start</p>
+        <h2 id="persona-gate-title">What brings you here today?</h2>
+        <p class="text-muted" style="margin-bottom:var(--space-6)">Tell us a little about yourself so we can tailor the calculator.</p>
+        <div class="persona-choice-row">
+          <button type="button" class="persona-choice-btn" id="choose-individual">
+            <span class="card-title">Building my own home</span>
+            <p class="card-body">A single house, for myself or my family</p>
+          </button>
+          <button type="button" class="persona-choice-btn" id="choose-business">
+            <span class="card-title">Business / contractor</span>
+            <p class="card-body">Estimating for clients or multiple projects</p>
+          </button>
+        </div>
       </div>
+
+      <form id="step-details-individual" hidden>
+        <p class="card-kicker" style="margin-bottom:var(--space-2)">Just a few details</p>
+        <h2 style="margin-bottom:var(--space-6)">Tell us how to reach you</h2>
+        <div class="field-grid cols-2" style="margin-bottom:var(--space-4)">
+          <div class="field"><label for="lead-name-i">Your name</label><input class="input" type="text" id="lead-name-i" maxlength="100" required></div>
+          <div class="field"><label for="lead-contact-i">Email or phone</label><input class="input" type="text" id="lead-contact-i" maxlength="100" required></div>
+        </div>
+        <div class="field-grid cols-2" style="margin-bottom:var(--space-6)">
+          <div class="field"><label for="lead-city-i">City (optional)</label><input class="input" type="text" id="lead-city-i" maxlength="100"></div>
+        </div>
+        <p class="status-banner" id="persona-gate-status-i" role="status" hidden></p>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:var(--space-3)">
+          <button type="button" class="btn btn-ghost persona-back">Back</button>
+          <button type="submit" class="btn btn-primary">Continue to the calculator <i data-lucide="arrow-right" style="width:16px;height:16px"></i></button>
+        </div>
+      </form>
+
+      <form id="step-details-business" hidden>
+        <p class="card-kicker" style="margin-bottom:var(--space-2)">Just a few details</p>
+        <h2 style="margin-bottom:var(--space-6)">Tell us about your business</h2>
+        <div class="field-grid cols-2" style="margin-bottom:var(--space-4)">
+          <div class="field"><label for="lead-company">Company name</label><input class="input" type="text" id="lead-company" maxlength="150" required></div>
+          <div class="field"><label for="lead-name-b">Contact person</label><input class="input" type="text" id="lead-name-b" maxlength="100" required></div>
+        </div>
+        <div class="field-grid cols-2" style="margin-bottom:var(--space-6)">
+          <div class="field"><label for="lead-contact-b">Email or phone</label><input class="input" type="text" id="lead-contact-b" maxlength="100" required></div>
+          <div class="field"><label for="lead-projects">Projects per year (optional)</label><input class="input" type="text" id="lead-projects" maxlength="20"></div>
+        </div>
+        <p class="status-banner" id="persona-gate-status-b" role="status" hidden></p>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:var(--space-3)">
+          <button type="button" class="btn btn-ghost persona-back">Back</button>
+          <button type="submit" class="btn btn-primary">Continue to the calculator <i data-lucide="arrow-right" style="width:16px;height:16px"></i></button>
+        </div>
+      </form>
+
     </div>
-
-    <form class="persona-step" id="step-details-individual" hidden>
-      <p class="persona-gate-eyebrow">Just a few details</p>
-      <h2>Tell us how to reach you</h2>
-      <div class="field-grid cols-2">
-        <div><label for="lead-name-i">Your name</label><input type="text" id="lead-name-i" maxlength="100" required></div>
-        <div><label for="lead-contact-i">Email or phone</label><input type="text" id="lead-contact-i" maxlength="100" required></div>
-      </div>
-      <div class="field-grid cols-2">
-        <div><label for="lead-city-i">City (optional)</label><input type="text" id="lead-city-i" maxlength="100"></div>
-      </div>
-      <p class="persona-gate-status" id="persona-gate-status-i" role="status"></p>
-      <div class="persona-gate-actions">
-        <button type="button" class="secondary-btn persona-back">Back</button>
-        <button type="submit" class="persona-submit-btn">Continue to the calculator</button>
-      </div>
-    </form>
-
-    <form class="persona-step" id="step-details-business" hidden>
-      <p class="persona-gate-eyebrow">Just a few details</p>
-      <h2>Tell us about your business</h2>
-      <div class="field-grid cols-2">
-        <div><label for="lead-company">Company name</label><input type="text" id="lead-company" maxlength="150" required></div>
-        <div><label for="lead-name-b">Contact person</label><input type="text" id="lead-name-b" maxlength="100" required></div>
-      </div>
-      <div class="field-grid cols-2">
-        <div><label for="lead-contact-b">Email or phone</label><input type="text" id="lead-contact-b" maxlength="100" required></div>
-        <div><label for="lead-projects">Projects per year (optional)</label><input type="text" id="lead-projects" maxlength="20"></div>
-      </div>
-      <p class="persona-gate-status" id="persona-gate-status-b" role="status"></p>
-      <div class="persona-gate-actions">
-        <button type="button" class="secondary-btn persona-back">Back</button>
-        <button type="submit" class="persona-submit-btn">Continue to the calculator</button>
-      </div>
-    </form>
   </div>
 </div>
 
-<button type="button" class="mode-switch-btn" id="mode-switch-btn" hidden></button>
+<!-- ============================== APP (post-gate) ============================== -->
+<div id="app-shell" hidden>
 
-<header class="hero">
-  <div class="hero-grid" aria-hidden="true"></div>
-  <div class="hero-content">
-    <p class="eyebrow" id="hero-eyebrow">Frontend + backend, on Vercel</p>
-    <h1>Ghar cost &amp; steel estimator</h1>
-    <p class="tagline" id="hero-tagline">You provide the plot and room details — every calculation runs on the backend.</p>
-    <p class="unit-disclosure">All prices in Indian Rupees (₹) · all dimensions in feet (ft)</p>
-  </div>
-</header>
-
-<main>
-<form id="estimate-form" novalidate>
-
-  <details class="block" id="business-project-block" open hidden>
-    <summary>Client &amp; project</summary>
-    <div class="field-grid cols-2">
-      <div><label for="projectClient">Client / project name</label><input type="text" id="projectClient" maxlength="150" placeholder="e.g. Sharma Residence, Plot 12"></div>
-    </div>
-  </details>
-
-  <details class="block" open>
-    <summary>Plot &amp; floors</summary>
-
-    <div class="map-upload-row">
-      <button type="button" class="map-upload-btn" id="map-upload-btn" aria-label="Upload a site map or photo to read dimensions from">+</button>
-      <div class="map-upload-text">
-        <span class="map-upload-title">Have a site map or plot photo?</span>
-        <span class="map-upload-sub">Upload a photo or PDF and we'll try to read the plot dimensions for you.</span>
-      </div>
-      <input type="file" id="map-upload-input" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" hidden>
-    </div>
-    <div class="map-upload-status" id="map-upload-status" role="status" hidden></div>
-    <div class="map-suggestion" id="map-suggestion" hidden>
-      <p class="map-suggestion-text" id="map-suggestion-text"></p>
-      <div class="map-suggestion-actions">
-        <button type="button" class="secondary-btn" id="map-suggestion-dismiss">Dismiss</button>
-        <button type="button" class="persona-submit-btn" id="map-suggestion-apply">Apply to plot length/width</button>
-      </div>
-    </div>
-
-    <div class="field-grid cols-3">
-      <div><label for="plotLength">Plot length (ft)</label><input type="number" id="plotLength" value="40" min="10" max="500" required></div>
-      <div><label for="plotWidth">Plot width (ft)</label><input type="number" id="plotWidth" value="30" min="10" max="500" required></div>
-      <div><label for="floors">Number of floors</label>
-        <select id="floors"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
-    </div>
-  </details>
-
-  <details class="block" open>
-    <summary>Rooms</summary>
-    <div class="room-row room-row-head" aria-hidden="true">
-      <span class="ts">Room length (ft)</span><span class="ts">Room width (ft)</span><span></span>
-    </div>
-    <div id="room-list"></div>
-    <button type="button" id="add-room" class="secondary-btn">+ Add room</button>
-  </details>
-
-  <details class="block" open>
-    <summary>Doors &amp; windows</summary>
-    <div class="field-grid cols-2">
-      <div><label for="totalDoors">Number of doors (per floor)</label><input type="number" id="totalDoors" value="6" min="0" max="60" required></div>
-      <div><label for="totalWindows">Number of windows (per floor)</label><input type="number" id="totalWindows" value="6" min="0" max="60" required></div>
-    </div>
-    <div class="field-grid cols-2" style="margin-top:14px">
-      <div><label for="doorSize">Standard door size</label>
-        <select id="doorSize">
-          <option value="3x6.5">3 ft x 6.5 ft</option>
-          <option value="3x7" selected>3 ft x 7 ft</option>
-          <option value="3.5x7">3.5 ft x 7 ft</option>
-        </select></div>
-      <div><label for="windowSize">Standard window size</label>
-        <select id="windowSize">
-          <option value="3x4">3 ft x 4 ft</option>
-          <option value="4x4" selected>4 ft x 4 ft</option>
-          <option value="4x5">4 ft x 5 ft</option>
-        </select></div>
-    </div>
-  </details>
-
-  <details class="block" open>
-    <summary>Washrooms, bathrooms &amp; parking</summary>
-    <div class="field-grid cols-3">
-      <div><label for="washrooms">Washrooms (per floor)</label><input type="number" id="washrooms" value="1" min="0" max="20" required>
-        <p class="hint">WC + basin only</p></div>
-      <div><label for="bathrooms">Bathrooms (per floor)</label><input type="number" id="bathrooms" value="1" min="0" max="20" required>
-        <p class="hint">WC + basin + shower</p></div>
-      <div><label for="parking">Parking (total bays)</label><input type="number" id="parking" value="1" min="0" max="100" required>
-        <p class="hint">Ground level, not per floor</p></div>
-    </div>
-  </details>
-
-  <button type="submit">Calculate detailed estimate</button>
-  <p class="hint" id="form-status" role="status"></p>
-</form>
-
-<section class="panel result-panel" id="result-panel" tabindex="-1" hidden>
-  <div class="corner tl" aria-hidden="true"></div>
-  <div class="corner tr" aria-hidden="true"></div>
-  <div class="corner bl" aria-hidden="true"></div>
-  <div class="corner br" aria-hidden="true"></div>
-  <p class="eyebrow">Structural summary</p>
-  <table id="summary-table" aria-label="Structural summary"><tbody></tbody></table>
-
-  <div class="total-preview" id="total-preview"></div>
-
-  <p class="eyebrow" style="margin-top:24px">Itemized estimate</p>
-  <table id="result-table" aria-label="Itemized cost estimate"><tbody></tbody></table>
-  <p class="total-cost" id="total-cost"></p>
-  <p class="total-ref" id="total-ref"></p>
-
-  <div class="action-groups">
-    <div class="action-group">
-      <span class="action-group-label">Export</span>
-      <div class="result-actions">
-        <button type="button" id="copy-summary" class="secondary-btn">Copy summary</button>
-        <button type="button" id="print-summary" class="secondary-btn">Print / Save as PDF</button>
-      </div>
-    </div>
-    <div class="action-group">
-      <span class="action-group-label">Compare</span>
-      <div class="result-actions">
-        <button type="button" id="save-scenario-a" class="secondary-btn">Save as Scenario A</button>
-        <button type="button" id="save-scenario-b" class="secondary-btn">Save as Scenario B</button>
-      </div>
-    </div>
+  <div class="nav">
+    <span class="nav-brand"><i data-lucide="home" style="width:18px;height:18px"></i>Ghar</span>
+    <a href="#" id="nav-calculator">Calculator</a>
+    <a href="#" id="nav-compare">Compare</a>
+    <span class="tag" id="persona-tag" style="margin-left:auto"></span>
+    <button type="button" class="btn btn-ghost" id="mode-switch-btn">Switch</button>
   </div>
 
-  <details class="assumptions">
-    <summary>Assumptions &amp; methodology used</summary>
-    <ul>
-      <li>All rates, wastage %, contingency (5%), transportation (3%), and labor (32%) are set on the backend — see <code>api/estimate.js</code> to change them.</li>
-      <li>Wall height fixed at 10 ft; soil type assumed medium; concrete mix M20; column count auto-estimated from built-up area — all backend defaults.</li>
-      <li>Windows assumed external, doors assumed internal (plus one main entrance door), consistent with the earlier version.</li>
-      <li>Washroom and bathroom sizes use standard defaults (5x4 ft and 6x5 ft) since only counts are collected on the frontend.</li>
-      <li>The total is shown as a range (±8%) rather than one exact figure, to reflect normal regional rate variance — treat the reference figure below it as a single-number approximation, not a quote.</li>
-      <li>This is a preliminary/detailed <em>estimate</em>, not a certified structural design — verify sizing with a licensed structural engineer before construction.</li>
-    </ul>
-  </details>
-</section>
+  <main class="app-main">
 
-<section class="panel compare-panel" id="compare-panel" hidden>
-  <p class="eyebrow">Compare scenarios</p>
-  <p class="hint">Save two estimates (e.g. 2 floors vs 3 floors) to see them side by side.</p>
-  <div class="compare-grid" id="compare-grid"></div>
-  <button type="button" id="clear-scenarios" class="secondary-btn">Clear saved scenarios</button>
-</section>
-</main>
+    <!-- SIMPLE UPLOAD (individual persona only) -->
+    <section class="screen simple-upload-wrap" id="screen-simple-upload" hidden>
+      <div class="simple-upload-card">
+        <div class="dialog-roof sm"></div>
+        <div class="dialog-card narrow" style="display:flex;flex-direction:column;align-items:center;gap:var(--space-4);text-align:center">
+          <button type="button" class="btn btn-primary btn-icon" style="width:56px;height:56px" id="simple-upload-btn" aria-label="Upload your plot plan or map"><i data-lucide="upload" style="width:24px;height:24px"></i></button>
+          <h2 style="margin:0;font-size:24px">Just upload your plot plan</h2>
+          <p class="text-muted" style="margin:0;max-width:360px">Drop in a photo, PDF, or map of your plot — we'll read the dimensions and rooms for you. No manual entry needed.</p>
+          <button type="button" class="btn btn-primary" id="simple-upload-btn-2">Upload plan / map <i data-lucide="arrow-right" style="width:16px;height:16px"></i></button>
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost" id="prefer-manual-btn">Prefer to enter details manually?</button>
+    </section>
 
-<div class="sticky-total" id="sticky-total" hidden>
-  <span id="sticky-total-text"></span>
+    <!-- FORM -->
+    <section class="screen fade-up" id="screen-form" hidden>
+      <form id="estimate-form" novalidate style="display:flex;flex-direction:column;gap:var(--space-8)">
+
+        <div class="hero-split">
+          <div class="hero-split-text">
+            <p class="tag tag-outline" style="margin-bottom:var(--space-3);width:fit-content">Frontend + backend, on Vercel</p>
+            <h1 style="margin-bottom:var(--space-3)">Ghar cost &amp; steel estimator</h1>
+            <p class="text-muted" style="font-size:15px">You provide the plot and room details — every calculation runs on the backend.</p>
+            <p class="text-muted" style="font-size:12px;margin-top:var(--space-3)">All prices in Indian Rupees (₹) · all dimensions in feet (ft)</p>
+          </div>
+          <div class="hero-split-photo">
+            <div class="photo-slot grayscale" style="position:absolute;inset:0">Home exterior / construction site photo</div>
+          </div>
+        </div>
+
+        <div class="card upload-row">
+          <button type="button" class="btn btn-primary btn-icon" id="map-upload-btn" aria-label="Upload a site map or photo"><i data-lucide="upload" style="width:18px;height:18px"></i></button>
+          <div>
+            <div class="card-title" style="font-size:15px">Have a site map or plot photo?</div>
+            <p class="card-body">Upload a photo or PDF — we'll open it so you can see the plot dimensions, and suggest values to fill in.</p>
+          </div>
+        </div>
+
+        <details class="card" id="business-project-block" open hidden>
+          <summary class="card-title" style="cursor:pointer;list-style:none">Client &amp; project</summary>
+          <div class="field-grid cols-2" style="margin-top:var(--space-4)">
+            <div class="field"><label for="projectClient">Client / project name</label><input class="input" type="text" id="projectClient" maxlength="150" placeholder="e.g. Sharma Residence, Plot 12"></div>
+          </div>
+        </details>
+
+        <div class="card">
+          <h4 style="margin:0">Plot &amp; floors</h4>
+          <div class="field-grid cols-3">
+            <div class="field"><label for="plotLength">Plot length (ft)</label><input class="input" type="number" id="plotLength" value="40" min="10" max="500" required></div>
+            <div class="field"><label for="plotWidth">Plot width (ft)</label><input class="input" type="number" id="plotWidth" value="30" min="10" max="500" required></div>
+            <div class="field"><label for="floors">Number of floors</label>
+              <select class="input" id="floors"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4 style="margin:0">Rooms</h4>
+          <div class="room-row room-row-head" aria-hidden="true">
+            <span>Room length (ft)</span><span>Room width (ft)</span><span></span>
+          </div>
+          <div id="room-list" style="display:flex;flex-direction:column;gap:var(--space-2)"></div>
+          <button type="button" id="add-room" class="btn btn-secondary" style="align-self:flex-start"><i data-lucide="plus" style="width:16px;height:16px"></i> Add room</button>
+        </div>
+
+        <div class="card">
+          <h4 style="margin:0">Doors &amp; windows</h4>
+          <div class="field-grid cols-2">
+            <div class="field"><label for="totalDoors">Number of doors (per floor)</label><input class="input" type="number" id="totalDoors" value="6" min="0" max="60" required></div>
+            <div class="field"><label for="totalWindows">Number of windows (per floor)</label><input class="input" type="number" id="totalWindows" value="6" min="0" max="60" required></div>
+            <div class="field"><label for="doorSize">Standard door size</label>
+              <select class="input" id="doorSize">
+                <option value="3x6.5">3 ft x 6.5 ft</option>
+                <option value="3x7" selected>3 ft x 7 ft</option>
+                <option value="3.5x7">3.5 ft x 7 ft</option>
+              </select></div>
+            <div class="field"><label for="windowSize">Standard window size</label>
+              <select class="input" id="windowSize">
+                <option value="3x4">3 ft x 4 ft</option>
+                <option value="4x4" selected>4 ft x 4 ft</option>
+                <option value="4x5">4 ft x 5 ft</option>
+              </select></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4 style="margin:0">Washrooms, bathrooms, kitchen &amp; parking</h4>
+          <div class="field-grid cols-4">
+            <div class="field"><label for="washrooms">Washrooms (per floor)</label><input class="input" type="number" id="washrooms" value="1" min="0" max="20" required>
+              <p class="field-hint">WC + basin only</p></div>
+            <div class="field"><label for="bathrooms">Bathrooms (per floor)</label><input class="input" type="number" id="bathrooms" value="1" min="0" max="20" required>
+              <p class="field-hint">WC + basin + shower</p></div>
+            <div class="field"><label for="kitchens">Kitchens (per floor)</label><input class="input" type="number" id="kitchens" value="1" min="0" max="20" required>
+              <p class="field-hint">Cooking + platform</p></div>
+            <div class="field"><label for="parking">Parking (total bays)</label><input class="input" type="number" id="parking" value="1" min="0" max="100" required>
+              <p class="field-hint">Ground level, not per floor</p></div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="calculate-btn" style="padding:14px 16px;font-size:15px">Calculate detailed estimate <i data-lucide="arrow-right" style="width:16px;height:16px"></i></button>
+        <p class="status-banner" id="form-status" role="status" hidden></p>
+      </form>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="screen fade-up" id="screen-results" tabindex="-1" hidden>
+      <div style="display:flex;flex-direction:column;gap:var(--space-6)">
+        <button type="button" class="btn btn-ghost" style="align-self:flex-start" id="edit-inputs-btn"><i data-lucide="arrow-left" style="width:16px;height:16px"></i> Edit inputs</button>
+
+        <div>
+          <p class="card-kicker" style="margin-bottom:var(--space-2)">Structural summary</p>
+          <table class="table" id="summary-table" aria-label="Structural summary"><tbody></tbody></table>
+        </div>
+
+        <div class="total-banner">
+          <div class="amount" id="total-cost"></div>
+          <span class="caption">Full breakdown below</span>
+        </div>
+
+        <div>
+          <p class="card-kicker" style="margin-bottom:var(--space-2)">Itemized estimate</p>
+          <table class="table" id="result-table" aria-label="Itemized cost estimate"><tbody></tbody></table>
+          <p class="total-repeat" id="total-cost-repeat"></p>
+          <p class="text-muted" style="font-size:12px;margin:0" id="total-ref"></p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+          <div>
+            <span class="action-group-label">Export</span>
+            <div class="action-group-row">
+              <button type="button" class="btn btn-secondary" id="copy-summary"><i data-lucide="copy" style="width:16px;height:16px"></i> Copy summary</button>
+              <button type="button" class="btn btn-secondary" id="print-summary"><i data-lucide="printer" style="width:16px;height:16px"></i> Print / Save as PDF</button>
+            </div>
+          </div>
+          <div>
+            <span class="action-group-label">Compare</span>
+            <div class="action-group-row">
+              <button type="button" class="btn btn-secondary" id="save-scenario-a"><i data-lucide="bookmark" style="width:16px;height:16px"></i> Save as Scenario A</button>
+              <button type="button" class="btn btn-secondary" id="save-scenario-b"><i data-lucide="bookmark" style="width:16px;height:16px"></i> Save as Scenario B</button>
+            </div>
+          </div>
+        </div>
+
+        <details style="font-size:13px" class="text-muted">
+          <summary style="cursor:pointer;color:var(--color-text)">Assumptions &amp; methodology used</summary>
+          <ul style="margin:10px 0 0;padding-left:18px;line-height:1.6">
+            <li>All rates, wastage %, contingency (5%), transportation (3%), and labor (32%) are backend defaults — see <code>api/estimate.js</code> to change them.</li>
+            <li>Wall height fixed at 10 ft; soil type assumed medium; concrete mix M20; column count auto-estimated from built-up area.</li>
+            <li>Windows assumed external, doors assumed internal (plus one main entrance door).</li>
+            <li>Washroom, bathroom, and kitchen sizes use standard defaults since only counts are collected on the frontend.</li>
+            <li>The total is shown as a range (±8%) rather than one exact figure, to reflect normal regional rate variance.</li>
+            <li>This is a preliminary/detailed <em>estimate</em>, not a certified structural design — verify sizing with a licensed structural engineer before construction.</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <!-- COMPARE -->
+    <section class="screen fade-up" id="screen-compare" hidden>
+      <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+        <div>
+          <p class="card-kicker" style="margin-bottom:var(--space-2)">Compare scenarios</p>
+          <p class="text-muted">Save two estimates (e.g. 2 floors vs 3 floors) from the results screen to see them side by side.</p>
+        </div>
+        <div id="compare-empty" class="text-muted" style="font-size:13px;font-style:italic">Nothing saved yet.</div>
+        <div id="compare-wrap" hidden>
+          <table class="table">
+            <thead><tr><th></th><th>Scenario A</th><th>Scenario B</th></tr></thead>
+            <tbody id="compare-body"></tbody>
+          </table>
+          <button type="button" class="btn btn-secondary" style="align-self:flex-start;margin-top:var(--space-4)" id="clear-scenarios"><i data-lucide="trash-2" style="width:16px;height:16px"></i> Clear saved scenarios</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
 </div>
 
-<script src="script.js"></script>
+<!-- ============================== UPLOAD MODAL ============================== -->
+<div class="dialog-backdrop" id="upload-modal" hidden>
+  <div style="width:min(480px,100%)">
+    <div class="dialog-roof sm"></div>
+    <div class="dialog-card narrow fade-up">
+
+      <div id="upload-preview-wrap" hidden>
+        <img id="upload-preview-img" class="upload-preview-img grayscale" alt="Uploaded site plan" hidden>
+        <embed id="upload-preview-embed" class="upload-preview-embed" type="application/pdf" hidden>
+        <p class="text-muted" style="font-size:11.5px;margin:6px 0 0" id="upload-file-name"></p>
+      </div>
+
+      <div class="upload-processing" id="upload-processing" hidden>
+        <i data-lucide="loader-2" style="width:28px;height:28px"></i>
+        <p class="text-muted" style="margin:0">Reading dimensions and rooms from your file…</p>
+      </div>
+
+      <div id="upload-done" hidden>
+        <div class="confidence-row">
+          <h3 style="margin:0;font-size:20px">Here's what we found</h3>
+          <span class="tag" id="upload-confidence-tag"></span>
+        </div>
+        <p style="font-size:14px;opacity:.85" id="upload-notes"></p>
+        <table class="table" style="margin:var(--space-3) 0" id="upload-plot-table">
+          <tbody>
+            <tr><td>Plot length</td><td id="upload-length-val"></td></tr>
+            <tr><td>Plot width</td><td id="upload-width-val"></td></tr>
+          </tbody>
+        </table>
+        <p class="text-muted" style="font-size:12px;margin-bottom:6px" id="upload-rooms-label" hidden>Detected rooms</p>
+        <div id="upload-rooms-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:var(--space-3)"></div>
+        <p class="text-muted" style="font-size:11.5px">This is a suggestion, not an answer — confirm against your actual site plan before relying on it.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="upload-dismiss">Dismiss</button>
+          <button type="button" class="btn btn-primary" id="upload-apply">Apply to plot &amp; rooms</button>
+        </div>
+      </div>
+
+      <div id="upload-error" hidden>
+        <p class="status-banner" id="upload-error-text"></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="upload-error-dismiss">Dismiss</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="script.js" defer></script>
 </body>
 </html>

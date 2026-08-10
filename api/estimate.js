@@ -12,6 +12,7 @@ const MAIN_DOOR_COUNT = 1; // one external entrance door, building-wide
 
 const WASHROOM_SIZE = { length: 5, width: 4 };
 const BATHROOM_SIZE = { length: 6, width: 5 };
+const KITCHEN_SIZE = { length: 10, width: 8 };
 const PARKING_BAY_SIZE = { length: 10, width: 18 };
 
 const EXT_WALL_THICKNESS_FT = 0.75;   // 9 inch brick wall
@@ -41,9 +42,11 @@ const PAINT_COATS = 3;
 const ELEC_POINTS_PER_GENERAL_ROOM = 5;
 const ELEC_POINTS_WASHROOM = 2;
 const ELEC_POINTS_BATHROOM = 3;
+const ELEC_POINTS_KITCHEN = 6; // appliance load — higher than a general room
 const ELEC_POINTS_PARKING = 1;
 const PLUMBING_FIXTURES_WASHROOM = 2; // WC + basin
 const PLUMBING_FIXTURES_BATHROOM = 3; // WC + basin + shower
+const PLUMBING_FIXTURES_KITCHEN = 1; // sink
 
 const RATES = {
   cement: 380, steel: 68, brick: 6500, sand: 55, aggregate: 60, excavation: 40,
@@ -128,23 +131,26 @@ function calculateEstimate(input) {
   const windowArea = windowW * windowH;
   const washrooms = Math.round(requireNum(input.washrooms, 'Washrooms', { min: 0, max: 20 }));
   const bathrooms = Math.round(requireNum(input.bathrooms, 'Bathrooms', { min: 0, max: 20 }));
+  const kitchens = Math.round(requireNum(input.kitchens, 'Kitchens', { min: 0, max: 20 }));
   const parking = Math.round(requireNum(input.parking, 'Parking bays', { min: 0, max: 100 }));
   const parkingArea = parking * PARKING_BAY_SIZE.length * PARKING_BAY_SIZE.width;
 
-  if (rooms.length === 0 && washrooms === 0 && bathrooms === 0) {
-    throw new Error('At least one room, washroom, or bathroom is required.');
+  if (rooms.length === 0 && washrooms === 0 && bathrooms === 0 && kitchens === 0) {
+    throw new Error('At least one room, washroom, bathroom, or kitchen is required.');
   }
 
   // --- Areas ---------------------------------------------------------------
   const washroomArea = WASHROOM_SIZE.length * WASHROOM_SIZE.width;
   const bathroomArea = BATHROOM_SIZE.length * BATHROOM_SIZE.width;
+  const kitchenArea = KITCHEN_SIZE.length * KITCHEN_SIZE.width;
   const washroomPerim = 2 * (WASHROOM_SIZE.length + WASHROOM_SIZE.width);
   const bathroomPerim = 2 * (BATHROOM_SIZE.length + BATHROOM_SIZE.width);
+  const kitchenPerim = 2 * (KITCHEN_SIZE.length + KITCHEN_SIZE.width);
 
   const roomAreaSum = rooms.reduce(function (s, r) { return s + r.length * r.width; }, 0)
-    + washrooms * washroomArea + bathrooms * bathroomArea;
+    + washrooms * washroomArea + bathrooms * bathroomArea + kitchens * kitchenArea;
   const roomPerimSum = rooms.reduce(function (s, r) { return s + 2 * (r.length + r.width); }, 0)
-    + washrooms * washroomPerim + bathrooms * bathroomPerim;
+    + washrooms * washroomPerim + bathrooms * bathroomPerim + kitchens * kitchenPerim;
 
   const builtUpAreaPerFloor = roomAreaSum * (1 + CIRCULATION_ALLOWANCE);
   const builtUpAreaTotal = builtUpAreaPerFloor * floors;
@@ -159,7 +165,7 @@ function calculateEstimate(input) {
   const plotFootprintArea = plotLength * plotWidth;
   const groundFloorNeedSqft = builtUpAreaPerFloor + parkingArea;
   if (groundFloorNeedSqft > plotFootprintArea) {
-    throw new Error('The ground floor needs about ' + Math.round(builtUpAreaPerFloor) + ' sqft for rooms' +
+    throw new Error('The ground floor needs about ' + Math.round(builtUpAreaPerFloor) + ' sqft for rooms/washrooms/bathrooms/kitchens' +
       (parkingArea > 0 ? ' plus ' + Math.round(parkingArea) + ' sqft for parking' : '') + ' = ' +
       Math.round(groundFloorNeedSqft) + ' sqft, but the plot footprint is only ' +
       Math.round(plotFootprintArea) + ' sqft. Reduce room sizes/count/parking, or increase the plot size.');
@@ -197,7 +203,7 @@ function calculateEstimate(input) {
 
   // --- Structural sizing (thumb-rules) --------------------------------------
   const maxSpanFt = rooms.reduce(function (m, r) { return Math.max(m, r.length, r.width); },
-    Math.max(WASHROOM_SIZE.length, BATHROOM_SIZE.length, 8));
+    Math.max(WASHROOM_SIZE.length, BATHROOM_SIZE.length, KITCHEN_SIZE.length, 8));
   const maxSpanM = ft2m(maxSpanFt);
 
   const slabThicknessM = Math.max(0.10, Math.round((maxSpanM / SPAN_DEPTH_RATIO) * 100) / 100);
@@ -266,8 +272,9 @@ function calculateEstimate(input) {
   const generalRoomCount = rooms.length;
   const electricalPoints = generalRoomCount * ELEC_POINTS_PER_GENERAL_ROOM * floors
     + washrooms * ELEC_POINTS_WASHROOM * floors + bathrooms * ELEC_POINTS_BATHROOM * floors
-    + parking * ELEC_POINTS_PARKING;
-  const plumbingFixtures = washrooms * PLUMBING_FIXTURES_WASHROOM * floors + bathrooms * PLUMBING_FIXTURES_BATHROOM * floors;
+    + kitchens * ELEC_POINTS_KITCHEN * floors + parking * ELEC_POINTS_PARKING;
+  const plumbingFixtures = washrooms * PLUMBING_FIXTURES_WASHROOM * floors + bathrooms * PLUMBING_FIXTURES_BATHROOM * floors
+    + kitchens * PLUMBING_FIXTURES_KITCHEN * floors;
 
   // --- Costs -----------------------------------------------------------------
   const cementCost = cementBagsFinal * RATES.cement;

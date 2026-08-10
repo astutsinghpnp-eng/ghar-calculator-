@@ -2,17 +2,98 @@
 // listed on the page and sends them to /api/estimate, then renders
 // whatever comes back. All BOQ logic lives in api/estimate.js.
 
-// --- Persona intake gate --------------------------------------------------
-// First-visit-required (persisted to localStorage after that): asks who the
-// visitor is, captures contact details via /api/lead, then tailors a few
-// pieces of copy/UI to "individual" vs "business" without forking the whole
-// app into two separate codebases.
+// =========================================================================
+// Screen switching — the app is a small set of full-screen "views" inside
+// #app-shell: simpleUpload (individual persona only), form, results, compare.
+// =========================================================================
+const screens = {
+  simpleUpload: document.getElementById('screen-simple-upload'),
+  form: document.getElementById('screen-form'),
+  results: document.getElementById('screen-results'),
+  compare: document.getElementById('screen-compare')
+};
+const navCalculatorLink = document.getElementById('nav-calculator');
+const navCompareLink = document.getElementById('nav-compare');
+let currentScreen = null;
+// Which data-entry screen the "Calculator" nav link should return to —
+// simpleUpload for a fresh individual visitor, form for business or once
+// someone has used the "enter manually" escape hatch.
+let lastEntryScreen = 'form';
+
+function showScreen(name, opts) {
+  opts = opts || {};
+  Object.keys(screens).forEach(function (key) { screens[key].hidden = key !== name; });
+  currentScreen = name;
+  if (name === 'simpleUpload' || name === 'form') lastEntryScreen = name;
+
+  const el = screens[name];
+  // Restart the fade-up entrance animation every time a screen is shown,
+  // not just on first paint — a class already present won't re-trigger.
+  el.classList.remove('fade-up');
+  void el.offsetWidth;
+  el.classList.add('fade-up');
+
+  navCalculatorLink.classList.toggle('active', name === 'form' || name === 'results' || name === 'simpleUpload');
+  navCompareLink.classList.toggle('active', name === 'compare');
+
+  if (!opts.preserveScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (opts.focus) el.focus({ preventScroll: true });
+}
+
+navCalculatorLink.addEventListener('click', function (e) {
+  e.preventDefault();
+  showScreen(lastEntryScreen);
+});
+navCompareLink.addEventListener('click', function (e) {
+  e.preventDefault();
+  renderCompare();
+  showScreen('compare');
+});
+
+// =========================================================================
+// Dust click effect — purely decorative. Clicking any button or link spawns
+// a handful of small square particles that fly outward and fade.
+// =========================================================================
+const dustLayer = document.getElementById('dust-layer');
+
+function spawnDust(x, y) {
+  for (let i = 0; i < 9; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 18 + Math.random() * 42;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+    const rot = Math.round(Math.random() * 180 - 90) + 'deg';
+    const duration = Math.round(450 + Math.random() * 250);
+    const p = document.createElement('span');
+    p.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;width:5px;height:5px;' +
+      'background:' + (i % 2 ? 'var(--color-accent)' : 'var(--color-text)') + ';pointer-events:none;' +
+      '--dx:' + dx + 'px;--dy:' + dy + 'px;--rot:' + rot + ';' +
+      'animation:dustPop ' + duration + 'ms ease forwards;';
+    dustLayer.appendChild(p);
+    p.addEventListener('animationend', function () { p.remove(); });
+  }
+}
+
+document.addEventListener('click', function (e) {
+  const target = e.target.closest('button, a');
+  if (!target) return;
+  spawnDust(e.clientX, e.clientY);
+});
+
+// =========================================================================
+// Persona intake gate — first-visit-required (persisted to localStorage
+// after that): asks who the visitor is, captures contact details via
+// /api/lead, then routes into the persona-appropriate screen.
+// =========================================================================
 const PERSONA_KEY = 'gharPersona.v1';
 const gate = document.getElementById('persona-gate');
 const stepChoose = document.getElementById('step-choose');
 const stepIndividual = document.getElementById('step-details-individual');
 const stepBusiness = document.getElementById('step-details-business');
+const appShell = document.getElementById('app-shell');
 const modeSwitchBtn = document.getElementById('mode-switch-btn');
+const personaTag = document.getElementById('persona-tag');
+const businessProjectBlock = document.getElementById('business-project-block');
 let gateDismissible = false;
 
 function showStep(step) {
@@ -24,31 +105,23 @@ function showStep(step) {
 function openGate(dismissible) {
   gateDismissible = !!dismissible;
   gate.hidden = false;
-  document.querySelector('main').inert = true;
   showStep(stepChoose);
 }
 
 function closeGate() {
   gate.hidden = true;
-  document.querySelector('main').inert = false;
 }
 
 function applyPersonaUI(persona) {
   const isBusiness = persona === 'business';
-  document.getElementById('hero-eyebrow').textContent = isBusiness
-    ? 'For contractors & businesses, on Vercel'
-    : 'Frontend + backend, on Vercel';
-  document.getElementById('hero-tagline').textContent = isBusiness
-    ? 'Generate a client-ready structural estimate in minutes — enter the plot and room details, we handle the math.'
-    : 'You provide the plot and room details — every calculation runs on the backend.';
-  document.getElementById('business-project-block').hidden = !isBusiness;
-  document.getElementById('save-scenario-a').textContent = isBusiness ? 'Save Project A' : 'Save as Scenario A';
-  document.getElementById('save-scenario-b').textContent = isBusiness ? 'Save Project B' : 'Save as Scenario B';
-  modeSwitchBtn.textContent = (isBusiness ? 'Business mode' : 'Homeowner mode') + ' · Switch';
-  modeSwitchBtn.hidden = false;
+  personaTag.textContent = isBusiness ? 'Business' : 'Individual';
+  personaTag.className = 'tag ' + (isBusiness ? 'tag-accent-2' : 'tag-accent');
+  businessProjectBlock.hidden = !isBusiness;
+  appShell.hidden = false;
 }
 
-function submitLead(persona, fields, statusEl, submitBtn) {
+function submitLead(persona, fields, statusEl, submitBtn, onDone) {
+  statusEl.hidden = true;
   statusEl.textContent = '';
   submitBtn.disabled = true;
   const payload = Object.assign({ persona: persona }, fields);
@@ -61,31 +134,40 @@ function submitLead(persona, fields, statusEl, submitBtn) {
     .then(function (result) {
       if (!result.ok) { throw new Error(result.data.error || 'Something went wrong.'); }
       try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
-      applyPersonaUI(persona);
-      closeGate();
+      onDone();
     })
     .catch(function (err) {
+      statusEl.hidden = false;
       statusEl.textContent = err.message + ' You can try again, or continue without saving your details.';
       // A backend hiccup shouldn't permanently lock a real visitor out —
       // offer a way through after the first failed attempt, without ever
       // silently skipping the ask on a clean run.
-      let continueLink = statusEl.nextElementSibling;
-      if (!continueLink || !continueLink.classList || !continueLink.classList.contains('persona-continue-anyway')) {
-        continueLink = document.createElement('button');
-        continueLink.type = 'button';
-        continueLink.className = 'secondary-btn persona-continue-anyway';
-        continueLink.textContent = 'Continue without saving details';
-        continueLink.addEventListener('click', function () {
+      let continueBtn = statusEl.nextElementSibling;
+      if (!continueBtn || !continueBtn.classList || !continueBtn.classList.contains('persona-continue-anyway')) {
+        continueBtn = document.createElement('button');
+        continueBtn.type = 'button';
+        continueBtn.className = 'btn btn-ghost persona-continue-anyway';
+        continueBtn.textContent = 'Continue without saving details';
+        continueBtn.addEventListener('click', function () {
           try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
-          applyPersonaUI(persona);
-          closeGate();
+          onDone();
         });
-        statusEl.insertAdjacentElement('afterend', continueLink);
+        statusEl.insertAdjacentElement('afterend', continueBtn);
       }
     })
     .finally(function () {
       submitBtn.disabled = false;
     });
+}
+
+function routeAfterGate(persona) {
+  applyPersonaUI(persona);
+  closeGate();
+  if (persona === 'individual') {
+    showScreen('simpleUpload');
+  } else {
+    showScreen('form');
+  }
 }
 
 document.getElementById('choose-individual').addEventListener('click', function () { showStep(stepIndividual); });
@@ -101,7 +183,7 @@ stepIndividual.addEventListener('submit', function (e) {
     contact: document.getElementById('lead-contact-i').value,
     city: document.getElementById('lead-city-i').value
   };
-  submitLead('individual', fields, document.getElementById('persona-gate-status-i'), stepIndividual.querySelector('.persona-submit-btn'));
+  submitLead('individual', fields, document.getElementById('persona-gate-status-i'), stepIndividual.querySelector('button[type="submit"]'), function () { routeAfterGate('individual'); });
 });
 
 stepBusiness.addEventListener('submit', function (e) {
@@ -112,7 +194,7 @@ stepBusiness.addEventListener('submit', function (e) {
     companyName: document.getElementById('lead-company').value,
     projectsPerYear: document.getElementById('lead-projects').value
   };
-  submitLead('business', fields, document.getElementById('persona-gate-status-b'), stepBusiness.querySelector('.persona-submit-btn'));
+  submitLead('business', fields, document.getElementById('persona-gate-status-b'), stepBusiness.querySelector('button[type="submit"]'), function () { routeAfterGate('business'); });
 });
 
 modeSwitchBtn.addEventListener('click', function () { openGate(true); });
@@ -124,125 +206,39 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && !gate.hidden && gateDismissible) closeGate();
 });
 
-// Boot: skip the gate entirely for a returning visitor who already chose.
+// Boot: skip the gate entirely for a returning visitor who already chose,
+// landing them straight on their persona's home screen.
 (function () {
   let savedPersona = null;
   try { savedPersona = localStorage.getItem(PERSONA_KEY); } catch (e) { savedPersona = null; }
   if (savedPersona === 'individual' || savedPersona === 'business') {
-    closeGate();
     applyPersonaUI(savedPersona);
+    closeGate();
+    showScreen(savedPersona === 'individual' ? 'simpleUpload' : 'form', { preserveScroll: true });
   } else {
     openGate(false);
   }
 })();
 
-// --- Map/photo upload → dimension suggestion ------------------------------
-// Uploads a site map/photo/PDF to /api/extract-dimensions (Claude vision on
-// the backend) and shows whatever it reads as a suggestion the visitor has
-// to explicitly apply — never auto-filled, since a misread here would be
-// exactly the kind of confidently-wrong number this app has spent a lot of
-// effort trying to avoid elsewhere.
-const MAP_MAX_BYTES = 15 * 1024 * 1024;
-const mapUploadBtn = document.getElementById('map-upload-btn');
-const mapUploadInput = document.getElementById('map-upload-input');
-const mapUploadStatus = document.getElementById('map-upload-status');
-const mapSuggestion = document.getElementById('map-suggestion');
-const mapSuggestionText = document.getElementById('map-suggestion-text');
-let pendingMapSuggestion = null;
+document.getElementById('prefer-manual-btn').addEventListener('click', function () {
+  showScreen('form');
+});
 
-function setMapStatus(text, isError) {
-  mapUploadStatus.hidden = !text;
-  mapUploadStatus.textContent = text || '';
-  mapUploadStatus.classList.toggle('error', !!isError);
-}
+// =========================================================================
+// Rooms list — the full-form screen's dynamic list of room length/width
+// pairs. A row can always be added; the last remaining row can't be removed
+// (the design always keeps at least one room row on screen).
+// =========================================================================
+const roomList = document.getElementById('room-list');
+let roomIdCounter = 0;
 
-function fileToBase64(file) {
-  return new Promise(function (resolve, reject) {
-    const reader = new FileReader();
-    reader.onload = function () {
-      // reader.result is "data:<mime>;base64,<data>" — only the part after the comma is needed.
-      const commaIndex = reader.result.indexOf(',');
-      resolve(reader.result.slice(commaIndex + 1));
-    };
-    reader.onerror = function () { reject(new Error('Could not read that file.')); };
-    reader.readAsDataURL(file);
+function updateRemoveButtons() {
+  const rows = roomList.querySelectorAll('.room-row');
+  const onlyOne = rows.length <= 1;
+  Array.prototype.forEach.call(rows, function (row) {
+    row.querySelector('.remove-room').disabled = onlyOne;
   });
 }
-
-mapUploadBtn.addEventListener('click', function () { mapUploadInput.click(); });
-
-mapUploadInput.addEventListener('change', function () {
-  const file = mapUploadInput.files[0];
-  mapSuggestion.hidden = true;
-  if (!file) return;
-
-  if (file.size > MAP_MAX_BYTES) {
-    setMapStatus('That file is too large — please upload something under 15MB.', true);
-    mapUploadInput.value = '';
-    return;
-  }
-
-  setMapStatus('Reading "' + file.name + '"…', false);
-
-  fileToBase64(file)
-    .then(function (base64) {
-      return fetch('/api/extract-dimensions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, fileName: file.name })
-      });
-    })
-    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-    .then(function (result) {
-      if (!result.ok) { throw new Error(result.data.error || 'Something went wrong reading that file.'); }
-      const r = result.data;
-      if (r.lengthFt === null && r.widthFt === null) {
-        setMapStatus('Could not read plot dimensions from that file' + (r.notes ? ': ' + r.notes : '.'), true);
-        return;
-      }
-      setMapStatus('', false);
-      pendingMapSuggestion = r;
-      const parts = [];
-      if (r.lengthFt !== null) parts.push('length ' + r.lengthFt + ' ft');
-      if (r.widthFt !== null) parts.push('width ' + r.widthFt + ' ft');
-      mapSuggestionText.textContent = 'We read ' + parts.join(' and ') + ' from "' + file.name + '" (' + r.confidence + ' confidence).' +
-        (r.notes ? ' ' + r.notes : '') + ' Double-check against the original before applying.';
-      mapSuggestion.hidden = false;
-    })
-    .catch(function (err) {
-      setMapStatus(err.message, true);
-    })
-    .finally(function () {
-      mapUploadInput.value = '';
-    });
-});
-
-document.getElementById('map-suggestion-apply').addEventListener('click', function () {
-  if (!pendingMapSuggestion) return;
-  function setVal(id, v) {
-    const el = document.getElementById(id);
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(el, v);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-  if (pendingMapSuggestion.lengthFt !== null) setVal('plotLength', pendingMapSuggestion.lengthFt);
-  if (pendingMapSuggestion.widthFt !== null) setVal('plotWidth', pendingMapSuggestion.widthFt);
-  mapSuggestion.hidden = true;
-  pendingMapSuggestion = null;
-});
-
-document.getElementById('map-suggestion-dismiss').addEventListener('click', function () {
-  mapSuggestion.hidden = true;
-  pendingMapSuggestion = null;
-});
-
-const roomList = document.getElementById('room-list');
-
-// Each room row gets a unique, stable id (independent of its position, so it
-// survives other rows being removed) — used for the aria-label announced to
-// screen readers and for wiring up inline field errors below.
-let roomIdCounter = 0;
 
 function addRoomRow(length, width) {
   roomIdCounter += 1;
@@ -250,16 +246,24 @@ function addRoomRow(length, width) {
   const row = document.createElement('div');
   row.className = 'room-row';
   row.innerHTML =
-    '<input class="room-length" id="room-' + n + '-length" type="number" min="4" max="100" value="' + length + '" aria-label="Room length (ft)">' +
-    '<input class="room-width" id="room-' + n + '-width" type="number" min="4" max="100" value="' + width + '" aria-label="Room width (ft)">' +
-    '<button type="button" class="remove-room" aria-label="Remove room">✕</button>';
-  row.querySelector('.remove-room').addEventListener('click', function () { row.remove(); saveForm(); });
+    '<input class="input room-length" id="room-' + n + '-length" type="number" min="4" max="100" value="' + length + '" aria-label="Room length (ft)">' +
+    '<input class="input room-width" id="room-' + n + '-width" type="number" min="4" max="100" value="' + width + '" aria-label="Room width (ft)">' +
+    '<button type="button" class="btn btn-icon remove-room" aria-label="Remove room">✕</button>';
+  row.querySelector('.remove-room').addEventListener('click', function () {
+    if (roomList.querySelectorAll('.room-row').length <= 1) return;
+    row.remove();
+    saveForm();
+    updateRemoveButtons();
+    updateCalculateButtonState();
+  });
   roomList.appendChild(row);
 }
 
 document.getElementById('add-room').addEventListener('click', function () {
   addRoomRow(10, 10);
   saveForm();
+  updateRemoveButtons();
+  updateCalculateButtonState();
 });
 
 function readRooms() {
@@ -276,9 +280,11 @@ function sizeFromPreset(preset) {
   return { width: parts[0], height: parts[1] };
 }
 
-// --- Inline field validation. Mirrors the limits api/estimate.js enforces
+// =========================================================================
+// Inline field validation — mirrors the limits api/estimate.js enforces
 // server-side, so a mistake gets caught right next to the field that has it
-// instead of only as one banner at the top after a round trip to the server. ---
+// instead of only as one banner at the top after a round trip to the server.
+// =========================================================================
 const FIELD_RULES = {
   plotLength: { label: 'Plot length', min: 10, max: 500 },
   plotWidth: { label: 'Plot width', min: 10, max: 500 },
@@ -286,6 +292,7 @@ const FIELD_RULES = {
   totalWindows: { label: 'Number of windows', min: 0, max: 60 },
   washrooms: { label: 'Washrooms', min: 0, max: 20 },
   bathrooms: { label: 'Bathrooms', min: 0, max: 20 },
+  kitchens: { label: 'Kitchens', min: 0, max: 20 },
   parking: { label: 'Parking bays', min: 0, max: 100 }
 };
 
@@ -362,9 +369,44 @@ function validateRoomRow(row) {
   return ok;
 }
 
-// --- Autosave: remember the visitor's last session in this browser, so an
-// accidental reload doesn't mean redoing a 15+ field form from scratch. ---
-const STORAGE_KEY = 'gharCalculatorForm.v1';
+function validateWholeForm() {
+  let ok = true;
+  Object.keys(FIELD_RULES).forEach(function (id) { if (!validateField(id)) ok = false; });
+  Array.prototype.forEach.call(roomList.querySelectorAll('.room-row'), function (row) {
+    if (!validateRoomRow(row)) ok = false;
+  });
+  return ok;
+}
+
+// Calculate button is only "live" (solid, enabled) when the form is actually
+// fillable — a deliberate design requirement, distinct from the fuller
+// range validation that runs on submit.
+function isFormFillable() {
+  const plotLength = Number(document.getElementById('plotLength').value);
+  const plotWidth = Number(document.getElementById('plotWidth').value);
+  const floors = Number(document.getElementById('floors').value);
+  if (!(plotLength > 0 && plotWidth > 0 && floors > 0)) return false;
+  const rows = roomList.querySelectorAll('.room-row');
+  if (rows.length === 0) return false;
+  return Array.prototype.every.call(rows, function (row) {
+    const l = Number(row.querySelector('.room-length').value);
+    const w = Number(row.querySelector('.room-width').value);
+    return l > 0 && w > 0;
+  });
+}
+
+function updateCalculateButtonState() {
+  const fillable = isFormFillable();
+  calculateBtn.disabled = !fillable;
+  calculateBtn.classList.toggle('btn-primary', fillable);
+  calculateBtn.classList.toggle('btn-secondary', !fillable);
+}
+
+// =========================================================================
+// Autosave — remember the visitor's last session in this browser, so an
+// accidental reload doesn't mean redoing a 15+ field form from scratch.
+// =========================================================================
+const STORAGE_KEY = 'gharCalculatorForm.v2';
 
 function serializeForm() {
   return {
@@ -378,12 +420,13 @@ function serializeForm() {
     windowSize: document.getElementById('windowSize').value,
     washrooms: document.getElementById('washrooms').value,
     bathrooms: document.getElementById('bathrooms').value,
+    kitchens: document.getElementById('kitchens').value,
     parking: document.getElementById('parking').value
   };
 }
 
 function saveForm() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeForm())); } catch (e) { /* storage unavailable — nothing to do */ }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeForm())); } catch (e) { /* storage unavailable */ }
 }
 
 function restoreForm() {
@@ -391,7 +434,7 @@ function restoreForm() {
   try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { saved = null; }
   if (!saved) return false;
 
-  ['plotLength', 'plotWidth', 'floors', 'totalDoors', 'totalWindows', 'doorSize', 'windowSize', 'washrooms', 'bathrooms', 'parking']
+  ['plotLength', 'plotWidth', 'floors', 'totalDoors', 'totalWindows', 'doorSize', 'windowSize', 'washrooms', 'bathrooms', 'kitchens', 'parking']
     .forEach(function (id) { if (saved[id] !== undefined) document.getElementById(id).value = saved[id]; });
 
   roomList.innerHTML = '';
@@ -406,15 +449,18 @@ if (!restoreForm()) {
   addRoomRow(10, 8);
   addRoomRow(14, 12);
 }
+updateRemoveButtons();
 
+// =========================================================================
+// Form submit → /api/estimate → render results
+// =========================================================================
 const form = document.getElementById('estimate-form');
 const statusEl = document.getElementById('form-status');
-const resultPanel = document.getElementById('result-panel');
+const calculateBtn = document.getElementById('calculate-btn');
 const summaryBody = document.querySelector('#summary-table tbody');
 const resultBody = document.querySelector('#result-table tbody');
 const totalCostEl = document.getElementById('total-cost');
 const totalRefEl = document.getElementById('total-ref');
-const submitBtn = form.querySelector('button[type="submit"]');
 let lastRenderedData = null;
 
 function fmt(n) { return Math.round(n).toLocaleString('en-IN'); }
@@ -426,30 +472,31 @@ function val(id) { return Number(document.getElementById(id).value) || 0; }
 form.addEventListener('input', saveForm);
 form.addEventListener('change', saveForm);
 
-// Re-validate a field the moment it's edited, so a corrected value clears its
-// error immediately instead of waiting for the next submit attempt.
+// Re-validate a field / re-check button state the moment it's edited.
 form.addEventListener('input', function (e) {
   const id = e.target.id;
-  if (FIELD_RULES[id]) { validateField(id); return; }
+  if (FIELD_RULES[id]) validateField(id);
   if (e.target.classList && (e.target.classList.contains('room-length') || e.target.classList.contains('room-width'))) {
     validateRoomRow(e.target.closest('.room-row'));
   }
+  updateCalculateButtonState();
 });
+form.addEventListener('change', updateCalculateButtonState);
 
-function validateWholeForm() {
-  let ok = true;
-  Object.keys(FIELD_RULES).forEach(function (id) { if (!validateField(id)) ok = false; });
-  Array.prototype.forEach.call(roomList.querySelectorAll('.room-row'), function (row) {
-    if (!validateRoomRow(row)) ok = false;
-  });
-  return ok;
-}
+updateCalculateButtonState();
 
-form.addEventListener('submit', function (e) {
-  e.preventDefault();
+const TAG_CLASS_BY_SECTION = {
+  'Structure': 'tag-accent',
+  'Walls & finishes': 'tag-accent-2',
+  'Openings & MEP': 'tag-neutral'
+};
+
+function submitEstimate() {
   statusEl.classList.remove('error');
 
   if (!validateWholeForm()) {
+    if (screens.form.hidden) showScreen('form');
+    statusEl.hidden = false;
     statusEl.textContent = 'Please fix the highlighted fields below.';
     statusEl.classList.add('error');
     const firstInvalid = form.querySelector('[aria-invalid="true"]');
@@ -457,9 +504,11 @@ form.addEventListener('submit', function (e) {
     return;
   }
 
+  statusEl.hidden = false;
+  statusEl.classList.remove('error');
   statusEl.textContent = 'Calculating…';
-  submitBtn.disabled = true;
-  submitBtn.classList.add('loading');
+  calculateBtn.disabled = true;
+  calculateBtn.classList.add('loading');
 
   const door = sizeFromPreset(document.getElementById('doorSize').value);
   const win = sizeFromPreset(document.getElementById('windowSize').value);
@@ -475,6 +524,7 @@ form.addEventListener('submit', function (e) {
     windowWidth: win.width, windowHeight: win.height,
     washrooms: val('washrooms'),
     bathrooms: val('bathrooms'),
+    kitchens: val('kitchens'),
     parking: val('parking')
   };
 
@@ -487,20 +537,28 @@ form.addEventListener('submit', function (e) {
     .then(function (result) {
       if (!result.ok) { throw new Error(result.data.error || 'Something went wrong.'); }
       render(result.data);
-      statusEl.textContent = '';
+      statusEl.hidden = true;
       statusEl.classList.remove('error');
     })
     .catch(function (err) {
-      // A rejected submission must not leave the previous result looking current.
-      resultPanel.hidden = true;
-      document.getElementById('sticky-total').hidden = true;
+      if (screens.form.hidden) showScreen('form');
+      statusEl.hidden = false;
       statusEl.textContent = 'Could not calculate: ' + err.message;
       statusEl.classList.add('error');
     })
     .finally(function () {
-      submitBtn.disabled = false;
-      submitBtn.classList.remove('loading');
+      calculateBtn.classList.remove('loading');
+      updateCalculateButtonState();
     });
+}
+
+form.addEventListener('submit', function (e) {
+  e.preventDefault();
+  submitEstimate();
+});
+
+document.getElementById('edit-inputs-btn').addEventListener('click', function () {
+  showScreen('form');
 });
 
 function render(data) {
@@ -518,7 +576,8 @@ function render(data) {
   let rows = '';
   data.items.forEach(function (item) {
     if (item.section !== lastSection) {
-      rows += '<tr class="section-row"><td colspan="3">' + item.section + '</td></tr>';
+      const tagClass = TAG_CLASS_BY_SECTION[item.section] || 'tag-neutral';
+      rows += '<tr><td colspan="3" style="padding-top:var(--space-4)"><span class="tag ' + tagClass + '">' + item.section + '</span></td></tr>';
       lastSection = item.section;
     }
     rows += '<tr><td>' + item.label + '</td><td>' + item.qty + '</td><td>' +
@@ -526,37 +585,30 @@ function render(data) {
     if (item.label === 'Brickwork' && data.summary.bricksPerSqft) {
       const perSqft = data.summary.bricksPerSqft;
       const normal = perSqft >= 30 && perSqft <= 40;
-      rows += '<tr><td colspan="3" class="benchmark-note">~' + perSqft + ' bricks/sqft — typical range is 30–40, so this looks ' +
+      rows += '<tr><td colspan="3" class="text-muted" style="font-size:11.5px">~' + perSqft + ' bricks/sqft — typical range is 30–40, so this looks ' +
         (normal ? 'normal.' : 'outside the usual range. Worth double-checking your room sizes and wall inputs.') + '</td></tr>';
     }
   });
-  rows += '<tr class="subtotal-row"><td>Material subtotal</td><td></td><td>' + money(data.materialSubtotal) + '</td></tr>';
-  rows += '<tr><td>Contingency (' + data.contingencyPercent + '%)</td><td></td><td>' + money(data.contingencyCost) + '</td></tr>';
-  rows += '<tr><td>Transportation (' + data.transportPercent + '%)</td><td></td><td>' + money(data.transportCost) + '</td></tr>';
+  rows += '<tr style="border-top:2px solid var(--color-divider)"><td style="font-weight:700">Material subtotal</td><td></td><td style="font-weight:700">' + money(data.materialSubtotal) + '</td></tr>';
+  rows += '<tr><td style="font-weight:700">Contingency (' + data.contingencyPercent + '%)</td><td></td><td style="font-weight:700">' + money(data.contingencyCost) + '</td></tr>';
+  rows += '<tr><td style="font-weight:700">Transportation (' + data.transportPercent + '%)</td><td></td><td style="font-weight:700">' + money(data.transportCost) + '</td></tr>';
   if (data.laborIncluded) {
-    rows += '<tr><td>Labor (' + data.laborPercent + '%)</td><td></td><td>' + money(data.laborCost) + '</td></tr>';
+    rows += '<tr><td style="font-weight:700">Labor (' + data.laborPercent + '%)</td><td></td><td style="font-weight:700">' + money(data.laborCost) + '</td></tr>';
   }
   resultBody.innerHTML = rows;
 
   const totalText = 'Estimated total: ' + money(data.grandTotalLow) + ' – ' + money(data.grandTotalHigh);
   totalCostEl.textContent = totalText;
+  document.getElementById('total-cost-repeat').textContent = totalText;
   totalRefEl.textContent = 'Reference midpoint: ' + money(data.grandTotal) + ' (range reflects ±' + data.estimateRangePercent + '% regional rate variance)';
-  document.getElementById('sticky-total-text').textContent = totalText;
-  document.getElementById('total-preview').innerHTML = totalText + '<span class="caption">Full breakdown below ↓</span>';
 
-  resultPanel.hidden = false;
-  resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  // Move focus to the result so keyboard and screen-reader users land on the
-  // new content instead of just seeing the page scroll underneath them.
-  resultPanel.focus({ preventScroll: true });
-
-  watchStickyTotal();
+  showScreen('results', { focus: true });
 }
 
 function buildSummaryText(data) {
   const lines = ['Ghar Calculator — Estimate Summary', ''];
   const clientField = document.getElementById('projectClient');
-  if (clientField && !document.getElementById('business-project-block').hidden && clientField.value.trim()) {
+  if (clientField && !businessProjectBlock.hidden && clientField.value.trim()) {
     lines.push('Client / project: ' + clientField.value.trim());
     lines.push('');
   }
@@ -587,13 +639,14 @@ function buildSummaryText(data) {
 document.getElementById('copy-summary').addEventListener('click', function () {
   if (!lastRenderedData) return;
   const btn = this;
-  const original = btn.textContent;
+  const original = btn.innerHTML;
   navigator.clipboard.writeText(buildSummaryText(lastRenderedData))
     .then(function () {
       btn.textContent = 'Copied!';
-      setTimeout(function () { btn.textContent = original; }, 1500);
+      setTimeout(function () { btn.innerHTML = original; }, 1500);
     })
     .catch(function () {
+      statusEl.hidden = false;
       statusEl.textContent = 'Could not copy — your browser may be blocking clipboard access. Try selecting the text manually.';
       statusEl.classList.add('error');
     });
@@ -601,24 +654,10 @@ document.getElementById('copy-summary').addEventListener('click', function () {
 
 document.getElementById('print-summary').addEventListener('click', function () { window.print(); });
 
-// --- Sticky total: once the main total scrolls out of view, pin a compact
-// copy of it to the bottom of the screen so the number that matters is
-// never more than a glance away on a long itemized table. ---
-const stickyTotalEl = document.getElementById('sticky-total');
-let stickyObserver = null;
-
-function watchStickyTotal() {
-  if (stickyObserver) stickyObserver.disconnect();
-  stickyObserver = new IntersectionObserver(function (entries) {
-    const mainTotalVisible = entries[0].isIntersecting;
-    stickyTotalEl.hidden = mainTotalVisible || resultPanel.hidden;
-  }, { threshold: 0 });
-  stickyObserver.observe(totalCostEl);
-}
-
-// --- Compare scenarios: save the current result into slot A or B so two
-// options (e.g. 2 floors vs 3 floors) can be looked at side by side instead
-// of re-entering the whole form to check one against the other. ---
+// =========================================================================
+// Compare scenarios — save the current result into slot A or B so two
+// options (e.g. 2 floors vs 3 floors) can be looked at side by side.
+// =========================================================================
 const SCENARIO_KEY = 'gharCalculatorScenarios.v1';
 
 function loadScenarios() {
@@ -639,15 +678,17 @@ function renderCompare() {
   const scenarios = loadScenarios();
   const a = scenarios.A;
   const b = scenarios.B;
-  const panel = document.getElementById('compare-panel');
-  const grid = document.getElementById('compare-grid');
+  const empty = document.getElementById('compare-empty');
+  const wrap = document.getElementById('compare-wrap');
+  const body = document.getElementById('compare-body');
 
-  if (!a && !b) { panel.hidden = true; return; }
-  panel.hidden = false;
+  if (!a && !b) { empty.hidden = false; wrap.hidden = true; return; }
+  empty.hidden = true;
+  wrap.hidden = false;
 
   const rows = [
-    ['', 'Scenario A', 'Scenario B'],
     ['Floors', compareCell(a, function (s) { return s.inputs.floors; }), compareCell(b, function (s) { return s.inputs.floors; })],
+    ['Room count', compareCell(a, function (s) { return s.inputs.rooms.length; }), compareCell(b, function (s) { return s.inputs.rooms.length; })],
     ['Built-up area', compareCell(a, function (s) { return fmt(s.data.summary.builtUpAreaTotal) + ' sqft'; }), compareCell(b, function (s) { return fmt(s.data.summary.builtUpAreaTotal) + ' sqft'; })],
     ['Cement', compareCell(a, function (s) { const i = findItem(s.data, 'Cement (incl. PCC)'); return i ? i.qty : '—'; }), compareCell(b, function (s) { const i = findItem(s.data, 'Cement (incl. PCC)'); return i ? i.qty : '—'; })],
     ['TMT steel', compareCell(a, function (s) { const i = findItem(s.data, 'TMT steel'); return i ? i.qty : '—'; }), compareCell(b, function (s) { const i = findItem(s.data, 'TMT steel'); return i ? i.qty : '—'; })],
@@ -655,9 +696,8 @@ function renderCompare() {
     ['Estimated total', compareCell(a, function (s) { return money(s.data.grandTotalLow) + '–' + money(s.data.grandTotalHigh); }), compareCell(b, function (s) { return money(s.data.grandTotalLow) + '–' + money(s.data.grandTotalHigh); })]
   ];
 
-  grid.innerHTML = rows.map(function (r, i) {
-    const cls = i === 0 ? 'compare-row compare-head' : 'compare-row';
-    return '<div class="' + cls + '"><span class="compare-label">' + r[0] + '</span><span class="compare-val">' + r[1] + '</span><span class="compare-val">' + r[2] + '</span></div>';
+  body.innerHTML = rows.map(function (r) {
+    return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>';
   }).join('');
 }
 
@@ -668,9 +708,9 @@ function saveScenario(slot, btn) {
   saveScenarios(scenarios);
   renderCompare();
   if (btn) {
-    const original = btn.textContent;
+    const original = btn.innerHTML;
     btn.textContent = 'Saved!';
-    setTimeout(function () { btn.textContent = original; }, 1200);
+    setTimeout(function () { btn.innerHTML = original; }, 1200);
   }
 }
 
@@ -682,3 +722,191 @@ document.getElementById('clear-scenarios').addEventListener('click', function ()
 });
 
 renderCompare(); // restore any scenarios saved in a previous session
+
+// =========================================================================
+// Map/photo upload → dimension + room suggestion. Shared by the simple-flow
+// screen (individual persona) and the "Have a site map?" card on the full
+// form. Uploads to /api/extract-dimensions (Claude vision on the backend)
+// and shows whatever it reads as a suggestion the visitor has to explicitly
+// apply — never auto-filled, since a misread here would be exactly the kind
+// of confidently-wrong number this app has spent a lot of effort avoiding
+// elsewhere. On the individual "simple" flow only, applying the suggestion
+// also runs the calculation immediately and jumps to Results — the whole
+// point of that path is to skip manual form entry.
+// =========================================================================
+const MAP_MAX_BYTES = 15 * 1024 * 1024;
+const mapUploadInput = document.getElementById('map-upload-input');
+const uploadModal = document.getElementById('upload-modal');
+const uploadPreviewWrap = document.getElementById('upload-preview-wrap');
+const uploadPreviewImg = document.getElementById('upload-preview-img');
+const uploadPreviewEmbed = document.getElementById('upload-preview-embed');
+const uploadFileName = document.getElementById('upload-file-name');
+const uploadProcessing = document.getElementById('upload-processing');
+const uploadDone = document.getElementById('upload-done');
+const uploadError = document.getElementById('upload-error');
+const uploadErrorText = document.getElementById('upload-error-text');
+let pendingUploadResult = null;
+let uploadSource = 'form'; // 'form' | 'simple' — which screen triggered the upload
+let uploadObjectUrl = null;
+
+function fileToBase64(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const commaIndex = reader.result.indexOf(',');
+      resolve(reader.result.slice(commaIndex + 1));
+    };
+    reader.onerror = function () { reject(new Error('Could not read that file.')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function resetUploadModal() {
+  uploadPreviewWrap.hidden = true;
+  uploadPreviewImg.hidden = true;
+  uploadPreviewEmbed.hidden = true;
+  uploadProcessing.hidden = true;
+  uploadDone.hidden = true;
+  uploadError.hidden = true;
+  pendingUploadResult = null;
+  if (uploadObjectUrl) { URL.revokeObjectURL(uploadObjectUrl); uploadObjectUrl = null; }
+}
+
+function closeUploadModal() {
+  uploadModal.hidden = true;
+  resetUploadModal();
+}
+
+function showUploadError(message) {
+  uploadProcessing.hidden = true;
+  uploadDone.hidden = true;
+  uploadError.hidden = false;
+  uploadErrorText.textContent = message;
+}
+
+function renderUploadDone(r) {
+  uploadDone.hidden = false;
+  const tag = document.getElementById('upload-confidence-tag');
+  tag.textContent = r.confidence.charAt(0).toUpperCase() + r.confidence.slice(1) + ' confidence';
+  tag.className = 'tag ' + (r.confidence === 'high' ? 'tag-accent' : 'tag-neutral');
+  document.getElementById('upload-notes').textContent = r.notes || '';
+  document.getElementById('upload-length-val').textContent = r.lengthFt !== null ? r.lengthFt + ' ft' : 'Not detected';
+  document.getElementById('upload-width-val').textContent = r.widthFt !== null ? r.widthFt + ' ft' : 'Not detected';
+
+  const roomsLabel = document.getElementById('upload-rooms-label');
+  const roomsListEl = document.getElementById('upload-rooms-list');
+  roomsListEl.innerHTML = '';
+  if (r.rooms && r.rooms.length) {
+    roomsLabel.hidden = false;
+    r.rooms.forEach(function (room) {
+      const row = document.createElement('div');
+      row.className = 'detected-room-row';
+      row.innerHTML = '<span>' + room.label + '</span><span>' + room.length + ' ft x ' + room.width + ' ft</span>';
+      roomsListEl.appendChild(row);
+    });
+  } else {
+    roomsLabel.hidden = true;
+  }
+}
+
+function openModalWithFile(file) {
+  resetUploadModal();
+  uploadModal.hidden = false;
+
+  if (file.size > MAP_MAX_BYTES) {
+    showUploadError('That file is too large — please upload something under 15MB.');
+    return;
+  }
+
+  uploadObjectUrl = URL.createObjectURL(file);
+  uploadPreviewWrap.hidden = false;
+  if (file.type === 'application/pdf') {
+    uploadPreviewEmbed.hidden = false;
+    uploadPreviewEmbed.src = uploadObjectUrl;
+  } else {
+    uploadPreviewImg.hidden = false;
+    uploadPreviewImg.src = uploadObjectUrl;
+  }
+  uploadFileName.textContent = file.name;
+  uploadProcessing.hidden = false;
+
+  fileToBase64(file)
+    .then(function (base64) {
+      return fetch('/api/extract-dimensions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, fileName: file.name })
+      });
+    })
+    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok) throw new Error(result.data.error || 'Something went wrong reading that file.');
+      const r = result.data;
+      if (r.lengthFt === null && r.widthFt === null && (!r.rooms || r.rooms.length === 0)) {
+        throw new Error('Could not read plot dimensions or rooms from that file' + (r.notes ? ': ' + r.notes : '.'));
+      }
+      uploadProcessing.hidden = true;
+      pendingUploadResult = r;
+      renderUploadDone(r);
+    })
+    .catch(function (err) {
+      showUploadError(err.message);
+    });
+}
+
+function triggerUpload(source) {
+  uploadSource = source;
+  mapUploadInput.value = '';
+  mapUploadInput.click();
+}
+
+document.getElementById('simple-upload-btn').addEventListener('click', function () { triggerUpload('simple'); });
+document.getElementById('simple-upload-btn-2').addEventListener('click', function () { triggerUpload('simple'); });
+document.getElementById('map-upload-btn').addEventListener('click', function () { triggerUpload('form'); });
+
+mapUploadInput.addEventListener('change', function () {
+  const file = mapUploadInput.files[0];
+  if (!file) return;
+  openModalWithFile(file);
+});
+
+document.getElementById('upload-dismiss').addEventListener('click', closeUploadModal);
+document.getElementById('upload-error-dismiss').addEventListener('click', closeUploadModal);
+uploadModal.addEventListener('click', function (e) { if (e.target === uploadModal) closeUploadModal(); });
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && !uploadModal.hidden) closeUploadModal();
+});
+
+function setInputValue(id, v) {
+  const el = document.getElementById(id);
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setter.call(el, v);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+document.getElementById('upload-apply').addEventListener('click', function () {
+  if (!pendingUploadResult) return;
+  const r = pendingUploadResult;
+  const wasSimpleFlow = uploadSource === 'simple';
+
+  if (r.lengthFt !== null) setInputValue('plotLength', r.lengthFt);
+  if (r.widthFt !== null) setInputValue('plotWidth', r.widthFt);
+  if (r.rooms && r.rooms.length) {
+    roomList.innerHTML = '';
+    r.rooms.forEach(function (room) { addRoomRow(room.length, room.width); });
+    updateRemoveButtons();
+  }
+  saveForm();
+  updateCalculateButtonState();
+  closeUploadModal();
+
+  if (wasSimpleFlow) {
+    submitEstimate();
+  } else {
+    showScreen('form');
+  }
+});
+
+// Icons: static markup already has data-lucide attributes; run once on load.
+if (window.lucide) window.lucide.createIcons();
