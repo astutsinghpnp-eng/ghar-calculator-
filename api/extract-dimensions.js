@@ -1,11 +1,13 @@
 // =========================================================================
 // DIMENSION EXTRACTION — reads an uploaded site map / plot photo / PDF and
-// asks Claude (vision) to identify the plot's length/width, and any
-// individual rooms it can make out, in feet.
+// asks Google's Gemini (vision) to identify the plot's length/width, and
+// any individual rooms it can make out, in feet.
 //
-// Requires ANTHROPIC_API_KEY to be set (locally via .env, see .env.example;
-// on Vercel via the project's Environment Variables dashboard). Without it,
-// this endpoint returns a clear 500 rather than pretending to work.
+// Requires GEMINI_API_KEY to be set (locally via .env, see .env.example; on
+// Vercel via the project's Environment Variables dashboard). Get a free key
+// at https://aistudio.google.com/apikey — no billing required for the
+// free tier this endpoint uses. Without the key, this endpoint returns a
+// clear 500 rather than pretending to work.
 //
 // This is a SUGGESTION, not an answer: OCR/vision on a hand-drawn or scanned
 // site map can be wrong, so the result is always returned with a confidence
@@ -16,7 +18,7 @@
 
 const https = require('https');
 
-const ANTHROPIC_MODEL = 'claude-sonnet-5';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const MAX_BASE64_CHARS = 20 * 1024 * 1024; // ~15MB of actual file data
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
 
@@ -43,36 +45,31 @@ const EXTRACTION_PROMPT = 'This image or PDF is a site plan, plot map, or a phot
   'than guessing — do the same per-room (omit a room you are not reasonably confident about instead of ' +
   'guessing its size).';
 
-function callAnthropic(imageBase64, mimeType) {
+function callGemini(imageBase64, mimeType) {
   return new Promise(function (resolve, reject) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      reject(new Error('ANTHROPIC_API_KEY is not set on the server — see .env.example.'));
+      reject(new Error('GEMINI_API_KEY is not set on the server — see .env.example.'));
       return;
     }
 
-    const contentBlock = mimeType === 'application/pdf'
-      ? { type: 'document', source: { type: 'base64', media_type: mimeType, data: imageBase64 } }
-      : { type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } };
-
     const payload = JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 400,
-      messages: [{
-        role: 'user',
-        content: [contentBlock, { type: 'text', text: EXTRACTION_PROMPT }]
-      }]
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mimeType, data: imageBase64 } },
+          { text: EXTRACTION_PROMPT }
+        ]
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 500 }
     });
 
     const req = https.request({
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
+      hostname: 'generativelanguage.googleapis.com',
+      path: '/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(apiKey),
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'Content-Length': Buffer.byteLength(payload)
       }
     }, function (res) {
       let data = '';
@@ -98,13 +95,17 @@ function callAnthropic(imageBase64, mimeType) {
   });
 }
 
-function parseModelReply(anthropicResponse) {
-  const textBlock = (anthropicResponse.content || []).filter(function (b) { return b.type === 'text'; })[0];
-  if (!textBlock) throw new Error('The vision service did not return a readable response.');
+function parseModelReply(geminiResponse) {
+  const candidate = (geminiResponse.candidates || [])[0];
+  const textPart = candidate && candidate.content && (candidate.content.parts || []).filter(function (p) { return typeof p.text === 'string'; })[0];
+  if (!textPart) {
+    const blockReason = geminiResponse.promptFeedback && geminiResponse.promptFeedback.blockReason;
+    throw new Error(blockReason ? 'The vision service declined to read this file (' + blockReason + ').' : 'The vision service did not return a readable response.');
+  }
 
   // The model was asked for bare JSON, but strip a markdown fence defensively
   // in case one slips in anyway.
-  const raw = textBlock.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const raw = textPart.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   let parsed;
   try { parsed = JSON.parse(raw); } catch (e) {
     throw new Error('Could not understand the vision service\'s response.');
@@ -167,9 +168,9 @@ module.exports = function handler(req, res) {
     return;
   }
 
-  callAnthropic(imageBase64, mimeType)
-    .then(function (anthropicResponse) {
-      const result = parseModelReply(anthropicResponse);
+  callGemini(imageBase64, mimeType)
+    .then(function (geminiResponse) {
+      const result = parseModelReply(geminiResponse);
       res.status(200).json(result);
     })
     .catch(function (err) {
