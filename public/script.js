@@ -20,6 +20,26 @@ function track(event, props) {
   try { if (window.mixpanel && window.mixpanel.track) window.mixpanel.track(event, props || {}); } catch (e) { /* analytics must never break the app */ }
 }
 
+// Links the visitor's anonymous Mixpanel device ID to who they actually
+// are, once they've told us (via the persona-gate form) — otherwise every
+// event is permanently anonymous. Only call this with real submitted
+// contact info; never with guessed/inferred data. This only affects events
+// from this point forward — anything already sent stays anonymous.
+function identifyLead(persona, fields) {
+  try {
+    if (!window.mixpanel || !window.mixpanel.identify || !fields.contact) return;
+    window.mixpanel.identify(fields.contact);
+    const profile = { persona: persona };
+    if (fields.name) profile['$name'] = fields.name;
+    if (fields.contact.indexOf('@') !== -1) profile['$email'] = fields.contact;
+    else profile['$phone'] = fields.contact;
+    if (fields.city) profile.city = fields.city;
+    if (fields.companyName) profile.companyName = fields.companyName;
+    if (fields.projectsPerYear) profile.projectsPerYear = fields.projectsPerYear;
+    if (window.mixpanel.people && window.mixpanel.people.set) window.mixpanel.people.set(profile);
+  } catch (e) { /* analytics must never break the app */ }
+}
+
 // =========================================================================
 // Screen switching — the app is a small set of full-screen "views" inside
 // #app-shell: simpleUpload (individual persona only), form, results, compare.
@@ -159,6 +179,7 @@ function submitLead(persona, fields, statusEl, submitBtn, onDone) {
     .then(function (result) {
       if (!result.ok) { throw new Error(result.data.error || 'Something went wrong.'); }
       try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
+      identifyLead(persona, fields);
       track('Lead Submitted', { persona: persona });
       onDone();
     })
@@ -177,6 +198,7 @@ function submitLead(persona, fields, statusEl, submitBtn, onDone) {
         continueBtn.textContent = 'Continue without saving details';
         continueBtn.addEventListener('click', function () {
           try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
+          identifyLead(persona, fields);
           track('Lead Skipped', { persona: persona });
           onDone();
         });
