@@ -12,7 +12,7 @@
 // below. Every track() call is guarded so a missing/blocked SDK (ad-
 // blockers commonly block Mixpanel) never breaks the app.
 // =========================================================================
-const MIXPANEL_TOKEN = 'YOUR_MIXPANEL_PROJECT_TOKEN';
+const MIXPANEL_TOKEN = '01053d385990b06546e663f83925eb4a';
 if (window.mixpanel && MIXPANEL_TOKEN.indexOf('YOUR_') !== 0) {
   window.mixpanel.init(MIXPANEL_TOKEN, { track_pageview: true, persistence: 'localStorage' });
 }
