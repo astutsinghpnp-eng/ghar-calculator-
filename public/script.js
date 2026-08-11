@@ -105,6 +105,7 @@ function showScreen(name, opts) {
   if (opts.focus) el.focus({ preventScroll: true });
 
   track('Screen Viewed', { screen: name });
+  if (name === 'form') track('Ghar Cost & Steel Estimator Viewed');
 }
 
 navCalculatorLink.addEventListener('click', function (e) {
@@ -248,14 +249,15 @@ function routeAfterGate(persona) {
   }
 }
 
-document.getElementById('choose-individual').addEventListener('click', function () { showStep(stepIndividual); });
-document.getElementById('choose-business').addEventListener('click', function () { showStep(stepBusiness); });
+document.getElementById('choose-individual').addEventListener('click', function () { track('Persona Choice Clicked', { choice: 'individual' }); showStep(stepIndividual); });
+document.getElementById('choose-business').addEventListener('click', function () { track('Persona Choice Clicked', { choice: 'business' }); showStep(stepBusiness); });
 document.querySelectorAll('.persona-back').forEach(function (btn) {
   btn.addEventListener('click', function () { showStep(stepChoose); });
 });
 
 stepIndividual.addEventListener('submit', function (e) {
   e.preventDefault();
+  track('Continue To Calculator Clicked', { persona: 'individual' });
   const fields = {
     name: document.getElementById('lead-name-i').value,
     contact: document.getElementById('lead-contact-i').value,
@@ -266,6 +268,7 @@ stepIndividual.addEventListener('submit', function (e) {
 
 stepBusiness.addEventListener('submit', function (e) {
   e.preventDefault();
+  track('Continue To Calculator Clicked', { persona: 'business' });
   const fields = {
     name: document.getElementById('lead-name-b').value,
     contact: document.getElementById('lead-contact-b').value,
@@ -300,6 +303,7 @@ document.addEventListener('keydown', function (e) {
 })();
 
 document.getElementById('prefer-manual-btn').addEventListener('click', function () {
+  track('Enter Manually Clicked');
   showScreen('form');
 });
 
@@ -571,6 +575,7 @@ const TAG_CLASS_BY_SECTION = {
 };
 
 function submitEstimate() {
+  track('Calculate Estimate Clicked');
   statusEl.classList.remove('error');
 
   if (!validateWholeForm()) {
@@ -955,6 +960,7 @@ function openModalWithFile(file) {
 }
 
 function triggerUpload(source) {
+  track('Upload Plan Clicked', { source: source });
   uploadSource = source;
   mapUploadInput.value = '';
   mapUploadInput.click();
