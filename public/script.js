@@ -3,6 +3,24 @@
 // whatever comes back. All BOQ logic lives in api/estimate.js.
 
 // =========================================================================
+// Analytics (Mixpanel) — the loader snippet lives in index.html and defines
+// window.mixpanel synchronously (even before the real library finishes
+// loading async), so it's safe to call from here on page load. The project
+// token is a public, write-only identifier — safe to hardcode client-side,
+// unlike the backend API keys used elsewhere in this app. Get one from
+// mixpanel.com → your project → Settings → Project Token, and paste it in
+// below. Every track() call is guarded so a missing/blocked SDK (ad-
+// blockers commonly block Mixpanel) never breaks the app.
+// =========================================================================
+const MIXPANEL_TOKEN = 'YOUR_MIXPANEL_PROJECT_TOKEN';
+if (window.mixpanel && MIXPANEL_TOKEN.indexOf('YOUR_') !== 0) {
+  window.mixpanel.init(MIXPANEL_TOKEN, { track_pageview: true, persistence: 'localStorage' });
+}
+function track(event, props) {
+  try { if (window.mixpanel && window.mixpanel.track) window.mixpanel.track(event, props || {}); } catch (e) { /* analytics must never break the app */ }
+}
+
+// =========================================================================
 // Screen switching — the app is a small set of full-screen "views" inside
 // #app-shell: simpleUpload (individual persona only), form, results, compare.
 // =========================================================================
@@ -38,6 +56,8 @@ function showScreen(name, opts) {
 
   if (!opts.preserveScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
   if (opts.focus) el.focus({ preventScroll: true });
+
+  track('Screen Viewed', { screen: name });
 }
 
 navCalculatorLink.addEventListener('click', function (e) {
@@ -139,11 +159,13 @@ function submitLead(persona, fields, statusEl, submitBtn, onDone) {
     .then(function (result) {
       if (!result.ok) { throw new Error(result.data.error || 'Something went wrong.'); }
       try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
+      track('Lead Submitted', { persona: persona });
       onDone();
     })
     .catch(function (err) {
       statusEl.hidden = false;
       statusEl.textContent = err.message + ' You can try again, or continue without saving your details.';
+      track('Lead Submit Failed', { persona: persona });
       // A backend hiccup shouldn't permanently lock a real visitor out —
       // offer a way through after the first failed attempt, without ever
       // silently skipping the ask on a clean run.
@@ -155,6 +177,7 @@ function submitLead(persona, fields, statusEl, submitBtn, onDone) {
         continueBtn.textContent = 'Continue without saving details';
         continueBtn.addEventListener('click', function () {
           try { localStorage.setItem(PERSONA_KEY, persona); } catch (e) { /* storage unavailable */ }
+          track('Lead Skipped', { persona: persona });
           onDone();
         });
         statusEl.insertAdjacentElement('afterend', continueBtn);
@@ -166,6 +189,7 @@ function submitLead(persona, fields, statusEl, submitBtn, onDone) {
 }
 
 function routeAfterGate(persona) {
+  track('Persona Selected', { persona: persona });
   applyPersonaUI(persona);
   closeGate();
   if (persona === 'individual') {
@@ -202,7 +226,7 @@ stepBusiness.addEventListener('submit', function (e) {
   submitLead('business', fields, document.getElementById('persona-gate-status-b'), stepBusiness.querySelector('button[type="submit"]'), function () { routeAfterGate('business'); });
 });
 
-modeSwitchBtn.addEventListener('click', function () { openGate(true); });
+modeSwitchBtn.addEventListener('click', function () { track('Gate Reopened'); openGate(true); });
 
 gate.addEventListener('click', function (e) {
   if (e.target === gate && gateDismissible) closeGate();
@@ -216,6 +240,7 @@ document.addEventListener('keydown', function (e) {
 (function () {
   let savedPersona = null;
   try { savedPersona = localStorage.getItem(PERSONA_KEY); } catch (e) { savedPersona = null; }
+  track('App Loaded', { returning_visitor: !!savedPersona, persona: savedPersona || null });
   if (savedPersona === 'individual' || savedPersona === 'business') {
     applyPersonaUI(savedPersona);
     closeGate();
@@ -569,6 +594,16 @@ document.getElementById('edit-inputs-btn').addEventListener('click', function ()
 function render(data) {
   lastRenderedData = data;
 
+  let personaForTracking = null;
+  try { personaForTracking = localStorage.getItem(PERSONA_KEY); } catch (e) { personaForTracking = null; }
+  track('Estimate Calculated', {
+    persona: personaForTracking,
+    floors: val('floors'),
+    room_count: readRooms().length,
+    total_low: data.grandTotalLow,
+    total_high: data.grandTotalHigh
+  });
+
   summaryBody.innerHTML = [
     ['Built-up area (total)', fmt(data.summary.builtUpAreaTotal) + ' sqft'],
     ['Slab thickness', data.summary.slabThicknessMm + ' mm'],
@@ -649,6 +684,7 @@ document.getElementById('copy-summary').addEventListener('click', function () {
     .then(function () {
       btn.textContent = 'Copied!';
       setTimeout(function () { btn.innerHTML = original; }, 1500);
+      track('Summary Copied');
     })
     .catch(function () {
       statusEl.hidden = false;
@@ -657,7 +693,7 @@ document.getElementById('copy-summary').addEventListener('click', function () {
     });
 });
 
-document.getElementById('print-summary').addEventListener('click', function () { window.print(); });
+document.getElementById('print-summary').addEventListener('click', function () { track('Print Clicked'); window.print(); });
 
 // =========================================================================
 // Compare scenarios — save the current result into slot A or B so two
@@ -712,6 +748,7 @@ function saveScenario(slot, btn) {
   scenarios[slot] = { savedAt: Date.now(), data: lastRenderedData, inputs: serializeForm() };
   saveScenarios(scenarios);
   renderCompare();
+  track('Scenario Saved', { slot: slot });
   if (btn) {
     const original = btn.innerHTML;
     btn.textContent = 'Saved!';
@@ -724,6 +761,7 @@ document.getElementById('save-scenario-b').addEventListener('click', function ()
 document.getElementById('clear-scenarios').addEventListener('click', function () {
   try { localStorage.removeItem(SCENARIO_KEY); } catch (e) { /* storage unavailable */ }
   renderCompare();
+  track('Scenarios Cleared');
 });
 
 renderCompare(); // restore any scenarios saved in a previous session
@@ -817,6 +855,7 @@ function renderUploadDone(r) {
 function openModalWithFile(file) {
   resetUploadModal();
   uploadModal.hidden = false;
+  track('Upload Started', { source: uploadSource, file_type: file.type });
 
   if (file.size > MAP_MAX_BYTES) {
     showUploadError('That file is too large — please upload something under 15MB.');
@@ -852,9 +891,16 @@ function openModalWithFile(file) {
       }
       uploadProcessing.hidden = true;
       pendingUploadResult = r;
+      track('Upload Succeeded', {
+        source: uploadSource,
+        confidence: r.confidence,
+        rooms_detected: (r.rooms || []).length,
+        plot_detected: r.lengthFt !== null && r.widthFt !== null
+      });
       renderUploadDone(r);
     })
     .catch(function (err) {
+      track('Upload Failed', { source: uploadSource, error: String(err.message).slice(0, 120) });
       showUploadError(err.message);
     });
 }
@@ -894,6 +940,7 @@ document.getElementById('upload-apply').addEventListener('click', function () {
   if (!pendingUploadResult) return;
   const r = pendingUploadResult;
   const wasSimpleFlow = uploadSource === 'simple';
+  track('Upload Applied', { source: uploadSource });
 
   if (r.lengthFt !== null) setInputValue('plotLength', r.lengthFt);
   if (r.widthFt !== null) setInputValue('plotWidth', r.widthFt);
