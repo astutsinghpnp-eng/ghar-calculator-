@@ -3,6 +3,25 @@
 // whatever comes back. All BOQ logic lives in api/estimate.js.
 
 // =========================================================================
+// App-level user ID — generated once on a visitor's first page load ever,
+// persisted in localStorage, and used as the one stable identity across
+// Mixpanel *and* any backend database added later (e.g. Supabase) —
+// independent of whether/when they submit their name/email via the
+// persona gate, and independent of any one analytics vendor's own ID
+// scheme. Sent to /api/lead so a future database can key off it directly.
+// =========================================================================
+const USER_ID_KEY = 'gharUserId.v1';
+function getOrCreateUserId() {
+  let id = null;
+  try { id = localStorage.getItem(USER_ID_KEY); } catch (e) { id = null; }
+  if (id) return id;
+  id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : ('u-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  try { localStorage.setItem(USER_ID_KEY, id); } catch (e) { /* storage unavailable — id still usable for this page load */ }
+  return id;
+}
+const USER_ID = getOrCreateUserId();
+
+// =========================================================================
 // Analytics (Mixpanel) — the loader snippet lives in index.html and defines
 // window.mixpanel synchronously (even before the real library finishes
 // loading async), so it's safe to call from here on page load. The project
@@ -11,32 +30,40 @@
 // mixpanel.com → your project → Settings → Project Token, and paste it in
 // below. Every track() call is guarded so a missing/blocked SDK (ad-
 // blockers commonly block Mixpanel) never breaks the app.
+//
+// USER_ID (not Mixpanel's own device ID, and not email/phone) is the
+// identity every event is tied to via identify(), from the very first
+// page load — so even anonymous, pre-persona-gate activity is already
+// attached to the same ID a submitted lead (and later, a database record)
+// will use.
 // =========================================================================
 const MIXPANEL_TOKEN = '01053d385990b06546e663f83925eb4a';
 if (window.mixpanel && MIXPANEL_TOKEN.indexOf('YOUR_') !== 0) {
   window.mixpanel.init(MIXPANEL_TOKEN, { track_pageview: true, persistence: 'localStorage' });
+  window.mixpanel.identify(USER_ID);
+  window.mixpanel.register({ userId: USER_ID });
 }
 function track(event, props) {
   try { if (window.mixpanel && window.mixpanel.track) window.mixpanel.track(event, props || {}); } catch (e) { /* analytics must never break the app */ }
 }
 
-// Links the visitor's anonymous Mixpanel device ID to who they actually
-// are, once they've told us (via the persona-gate form) — otherwise every
-// event is permanently anonymous. Only call this with real submitted
-// contact info; never with guessed/inferred data. This only affects events
-// from this point forward — anything already sent stays anonymous.
+// Attaches the name/email/etc a visitor actually submitted (via the
+// persona-gate form) to their Mixpanel profile — as properties on the
+// existing USER_ID identity, not as a new identity. Only call this with
+// real submitted contact info; never with guessed/inferred data.
 function identifyLead(persona, fields) {
   try {
-    if (!window.mixpanel || !window.mixpanel.identify || !fields.contact) return;
-    window.mixpanel.identify(fields.contact);
-    const profile = { persona: persona };
+    if (!window.mixpanel || !window.mixpanel.people || !window.mixpanel.people.set) return;
+    const profile = { persona: persona, userId: USER_ID };
     if (fields.name) profile['$name'] = fields.name;
-    if (fields.contact.indexOf('@') !== -1) profile['$email'] = fields.contact;
-    else profile['$phone'] = fields.contact;
+    if (fields.contact) {
+      if (fields.contact.indexOf('@') !== -1) profile['$email'] = fields.contact;
+      else profile['$phone'] = fields.contact;
+    }
     if (fields.city) profile.city = fields.city;
     if (fields.companyName) profile.companyName = fields.companyName;
     if (fields.projectsPerYear) profile.projectsPerYear = fields.projectsPerYear;
-    if (window.mixpanel.people && window.mixpanel.people.set) window.mixpanel.people.set(profile);
+    window.mixpanel.people.set(profile);
   } catch (e) { /* analytics must never break the app */ }
 }
 
@@ -169,7 +196,7 @@ function submitLead(persona, fields, statusEl, submitBtn, onDone) {
   statusEl.hidden = true;
   statusEl.textContent = '';
   submitBtn.disabled = true;
-  const payload = Object.assign({ persona: persona }, fields);
+  const payload = Object.assign({ persona: persona, userId: USER_ID }, fields);
   fetch('/api/lead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

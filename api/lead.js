@@ -53,9 +53,15 @@ function captureLead(input) {
 
   const name = requireStr(input.name, 'Name', { maxLen: 100 });
   const contact = requireStr(input.contact, 'Email or phone number', { maxLen: 100 });
+  // Stable per-browser ID assigned client-side on first visit (see
+  // getOrCreateUserId() in public/script.js) — carried through so a future
+  // database can key records to the same identity Mixpanel uses, without
+  // depending on this lead form ever being submitted.
+  const userId = optionalStr(input.userId, 100) || null;
 
   const record = {
     submittedAt: new Date().toISOString(),
+    userId: userId,
     persona: persona,
     name: name,
     contact: contact
