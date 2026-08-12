@@ -5,6 +5,71 @@
 // certified structural design. Replace with numbers you trust.
 // =========================================================================
 
+const https = require('https');
+
+// Best-effort save into Supabase's "estimates" table — never allowed to
+// block or fail the actual estimate response. If SUPABASE_URL/
+// SUPABASE_SERVICE_ROLE_KEY aren't set, or the request fails, this is
+// swallowed (logged, not thrown) since the calculation itself already
+// succeeded and that's what the visitor is waiting on.
+function saveEstimateToSupabase(input, result) {
+  return new Promise(function (resolve) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) { resolve(); return; }
+
+    const record = {
+      user_id: input.userId || null,
+      persona: input.persona || null,
+      plot_length: input.plotLength,
+      plot_width: input.plotWidth,
+      floors: input.floors,
+      rooms: Array.isArray(input.rooms) ? input.rooms : [],
+      total_doors: input.totalDoors,
+      total_windows: input.totalWindows,
+      washrooms: input.washrooms,
+      bathrooms: input.bathrooms,
+      kitchens: input.kitchens,
+      parking: input.parking,
+      built_up_area_sqft: result.summary.builtUpAreaTotal,
+      estimate_total_low: result.grandTotalLow,
+      estimate_total_high: result.grandTotalHigh,
+      estimate_items: result.items
+    };
+
+    const payload = JSON.stringify(record);
+    const hostname = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+    const req = https.request({
+      hostname: hostname,
+      path: '/rest/v1/estimates',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'apikey': key,
+        'Authorization': 'Bearer ' + key,
+        'Prefer': 'return=minimal'
+      }
+    }, function (res) {
+      res.on('data', function () {});
+      res.on('end', function () {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          console.error('Supabase estimate save failed with status ' + res.statusCode);
+        }
+        resolve();
+      });
+    });
+
+    req.on('error', function (err) {
+      console.error('Supabase estimate save failed: ' + err.message);
+      resolve();
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
 const WALL_HEIGHT_FT = 10;
 const DOOR_AREA_DEFAULT = { width: 3, height: 7 };
 const WINDOW_AREA_DEFAULT = { width: 4, height: 4 };
@@ -361,12 +426,17 @@ module.exports = function handler(req, res) {
     res.status(405).json({ error: 'Use POST with a JSON body.' });
     return;
   }
+  const input = req.body || {};
+  let result;
   try {
-    const result = calculateEstimate(req.body || {});
-    res.status(200).json(result);
+    result = calculateEstimate(input);
   } catch (err) {
     res.status(400).json({ error: err.message });
+    return;
   }
+  saveEstimateToSupabase(input, result).then(function () {
+    res.status(200).json(result);
+  });
 };
 
 module.exports.calculateEstimate = calculateEstimate; // exported for local testing

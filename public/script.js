@@ -597,7 +597,12 @@ function submitEstimate() {
   const door = sizeFromPreset(document.getElementById('doorSize').value);
   const win = sizeFromPreset(document.getElementById('windowSize').value);
 
+  let personaForEstimate = null;
+  try { personaForEstimate = localStorage.getItem(PERSONA_KEY); } catch (e) { personaForEstimate = null; }
+
   const payload = {
+    userId: USER_ID,
+    persona: personaForEstimate,
     plotLength: val('plotLength'),
     plotWidth: val('plotWidth'),
     floors: val('floors'),
