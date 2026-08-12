@@ -1,16 +1,14 @@
 // =========================================================================
-// LEAD CAPTURE — stores contact details from the persona-intake gate so
-// they can be followed up with later.
+// LEAD CAPTURE — saves contact details from the persona-intake gate into
+// Supabase (table: leads), so they're never lost — Vercel's filesystem
+// can't store files permanently, which is why a database is required here.
 //
-// Best-effort local file write (data/leads.jsonl) only — works for local
-// dev, silently does nothing on a read-only filesystem (e.g. Vercel). No
-// external service is required; this always reports success back to the
-// visitor even when nothing was actually persisted, by design (the
-// alternative — requiring an email/API key — was removed at the project
-// owner's request). If real durable lead capture is needed later, this is
-// the file to revisit.
+// Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (see .env.example).
+// Also best-effort writes to a local file for local dev convenience, but
+// that's not relied on for durability — Supabase is the real store.
 // =========================================================================
 
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
@@ -36,13 +34,56 @@ function optionalStr(v, maxLen) {
   return trimmed.slice(0, maxLen || 200);
 }
 
-// Best-effort — failures (e.g. read-only filesystem on Vercel) are swallowed
-// on purpose rather than surfaced to the visitor.
+// Best-effort only — never relied on for durability. Failures (e.g.
+// Vercel's read-only filesystem) are swallowed on purpose.
 function appendLeadLocally(record) {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.appendFileSync(LEADS_FILE, JSON.stringify(record) + '\n', 'utf8');
-  } catch (e) { /* no durable storage available here — nothing to do */ }
+  } catch (e) { /* no local filesystem available here — nothing to do */ }
+}
+
+function saveToSupabase(record) {
+  return new Promise(function (resolve, reject) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      reject(new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set on the server — see .env.example.'));
+      return;
+    }
+
+    const payload = JSON.stringify(record);
+    const hostname = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+    const req = https.request({
+      hostname: hostname,
+      path: '/rest/v1/leads',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'apikey': key,
+        'Authorization': 'Bearer ' + key,
+        'Prefer': 'return=minimal'
+      }
+    }, function (res) {
+      let data = '';
+      res.on('data', function (chunk) { data += chunk; });
+      res.on('end', function () {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+          return;
+        }
+        let msg = 'Supabase returned ' + res.statusCode + '.';
+        try { const parsed = JSON.parse(data); if (parsed && parsed.message) msg = parsed.message; } catch (e) { /* keep default msg */ }
+        reject(new Error(msg));
+      });
+    });
+
+    req.on('error', function (err) { reject(new Error('Could not reach Supabase: ' + err.message)); });
+    req.write(payload);
+    req.end();
+  });
 }
 
 function captureLead(input) {
@@ -54,28 +95,26 @@ function captureLead(input) {
   const name = requireStr(input.name, 'Name', { maxLen: 100 });
   const contact = requireStr(input.contact, 'Email or phone number', { maxLen: 100 });
   // Stable per-browser ID assigned client-side on first visit (see
-  // getOrCreateUserId() in public/script.js) — carried through so a future
-  // database can key records to the same identity Mixpanel uses, without
-  // depending on this lead form ever being submitted.
+  // getOrCreateUserId() in public/script.js) — carried through so this
+  // Supabase row can be linked to the same identity Mixpanel uses.
   const userId = optionalStr(input.userId, 100) || null;
 
+  // Column names use snake_case to match the "leads" table in Supabase.
   const record = {
-    submittedAt: new Date().toISOString(),
-    userId: userId,
+    user_id: userId,
     persona: persona,
     name: name,
-    contact: contact
+    contact: contact,
+    city: persona === 'individual' ? (optionalStr(input.city, 100) || null) : null,
+    company_name: persona === 'business' ? requireStr(input.companyName, 'Company name', { maxLen: 150 }) : null,
+    projects_per_year: persona === 'business' ? (optionalStr(input.projectsPerYear, 20) || null) : null
   };
 
-  if (persona === 'business') {
-    record.companyName = requireStr(input.companyName, 'Company name', { maxLen: 150 });
-    record.projectsPerYear = optionalStr(input.projectsPerYear, 20);
-  } else {
-    record.city = optionalStr(input.city, 100);
-  }
-
   appendLeadLocally(record);
-  return { ok: true };
+
+  return saveToSupabase(record).then(function () {
+    return { ok: true };
+  });
 }
 
 module.exports = function handler(req, res) {
@@ -83,12 +122,18 @@ module.exports = function handler(req, res) {
     res.status(405).json({ error: 'Use POST with a JSON body.' });
     return;
   }
+
+  let result;
   try {
-    const result = captureLead(req.body || {});
-    res.status(200).json(result);
+    result = captureLead(req.body || {});
   } catch (err) {
     res.status(400).json({ error: err.message });
+    return;
   }
+
+  result
+    .then(function (data) { res.status(200).json(data); })
+    .catch(function (err) { res.status(502).json({ error: err.message }); });
 };
 
 module.exports.captureLead = captureLead; // exported for local testing
